@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JO STADIUM - Réservation</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #101820;
+      color: white;
+    }
+    header {
+      background: #172631;
+      padding: 22px 15px;
+      text-align: center;
+      border-bottom: 3px solid #f4a340;
+    }
+    header h1 { margin: 0; color: #f4a340; }
+    header p { margin-bottom: 0; }
+    main {
+      max-width: 600px;
+      margin: 25px auto;
+      padding: 15px;
+    }
+    .card {
+      background: #1b2b36;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 12px;
+      border: 1px solid #344955;
+    }
+    label {
+      display: block;
+      margin: 15px 0 7px;
+    }
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 7px;
+      border: 1px solid #657985;
+      background: #fff;
+      color: #111;
+      font-size: 16px;
+    }
+    button, .admin-link {
+      display: block;
+      width: 100%;
+      padding: 13px;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 7px;
+      background: #f4a340;
+      color: #101820;
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .slots {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .slot {
+      padding: 14px 5px;
+      border: 2px solid #657985;
+      border-radius: 8px;
+      background: #243945;
+      color: white;
+      cursor: pointer;
+      text-align: center;
+    }
+    .slot.selected {
+      background: #f4a340;
+      color: #101820;
+      border-color: #f4a340;
+    }
+    .slot:disabled {
+      background: #555;
+      color: #bbb;
+      cursor: not-allowed;
+      border-color: #555;
+    }
+    #message { margin-top: 15px; line-height: 1.5; }
+    footer { text-align: center; padding: 20px; color: #bbb; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JO STADIUM</h1>
+    <p>Réservez votre terrain 6 contre 6</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Réserver un terrain</h2>
+
+      <form id="bookingForm">
+        <label for="name">Nom complet</label>
+        <input id="name" name="name" required>
+
+        <label for="phone">Numéro de téléphone</label>
+        <input id="phone" name="phone" type="tel" required>
+
+        <label for="date">Date de réservation</label>
+        <input id="date" name="date" type="date" required>
+
+        <label>Choisissez un créneau</label>
+        <div class="slots">
+          <button type="button" class="slot" data-time="16:00-17:00">16h00–17h00</button>
+          <button type="button" class="slot" data-time="17:00-18:00">17h00–18h00</button>
+          <button type="button" class="slot" data-time="18:00-19:00">18h00–19h00</button>
+          <button type="button" class="slot" data-time="19:00-20:00">19h00–20h00</button>
+        </div>
+
+        <input type="hidden" id="time" name="time" required>
+        <button type="submit">Confirmer la réservation</button>
+        <div id="message" role="status"></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Administration</h2>
+      <p>Accédez à l'espace de gestion des réservations.</p>
+      <a class="admin-link" href="/admin.html">Gestion d’administration</a>
+    </section>
+  </main>
+
+  <footer>JO STADIUM — Terrain 6x6</footer>
+
+  <script>
+    const dateInput = document.getElementById('date');
+    const today = new Date();
+    const localToday = new Date(
+      today.getTime() - today.getTimezoneOffset() * 60000
+    ).toISOString().split('T')[0];
+    dateInput.min = localToday;
+
+    let selectedSlot = '';
+
+    document.querySelectorAll('.slot').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.slot').forEach(slot =>
+          slot.classList.remove('selected')
+        );
+        button.classList.add('selected');
+        selectedSlot = button.dataset.time;
+        document.getElementById('time').value = selectedSlot;
+        document.getElementById('message').textContent = '';
+      });
+    });
+
+    document.getElementById('bookingForm').addEventListener('submit', async event => {
+      event.preventDefault();
+
+      const message = document.getElementById('message');
+
+      if (!selectedSlot) {
+        message.textContent = 'Veuillez choisir un créneau horaire.';
+        return;
+      }
+
+      const booking = {
+        name: document.getElementById('name').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        date: dateInput.value,
+        time: selectedSlot
+      };
+
+      message.textContent = 'Envoi de la réservation...';
+
+      try {
+        const response = await fetch('/api/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(booking)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || result.error || 'Réservation impossible.');
+        }
+
+        message.textContent = result.message || 'Réservation enregistrée avec succès !';
+        event.target.reset();
+        selectedSlot = '';
+        document.querySelectorAll('.slot').forEach(slot =>
+          slot.classList.remove('selected')
+        );
+      } catch (error) {
+        message.textContent = error.message === 'Failed to fetch'
+          ? 'Le serveur ne répond pas. Vérifiez que le site est déployé.'
+          : error.message;
+      }
+    });
+  </script>
+</body>
+</html>

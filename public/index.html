@@ -203,7 +203,7 @@ body.admin-open .admin-section{display:block}
 <header class="header">
   <a class="logo" href="#accueil"><img class="brand-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIiBhcmlhLWxhYmVsPSJMb2dvIEpPIFNUQURJVU0iPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iciIgeDE9IjAiIHgyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjZmYzYjMwIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjYjgwZjE4Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PGNpcmNsZSBjeD0iNjAiIGN5PSI0MyIgcj0iMjciIGZpbGw9IiNmN2Y3ZjciIHN0cm9rZT0iIzExMSIgc3Ryb2tlLXdpZHRoPSI1Ii8+PHBhdGggZD0iTTYwIDIzbDkgNy0zIDExSDU0bC0zLTExek0zOSAzOWwxMS0zIDcgOC02IDEwLTExLTN6TTgxIDM5bC0xMS0zLTcgOCA2IDEwIDExLTN6TTQ2IDYxbDktN2gxMGw5IDctNSAxMUg1MXoiIGZpbGw9IiMxNzE5MWQiLz48cGF0aCBkPSJNMTggOTFjMTAtMTIgMjUtMTggNDItMThzMzIgNiA0MiAxOHYxM0gxOHoiIGZpbGw9InVybCgjcikiLz48cGF0aCBkPSJNMjcgOTFoNjZNMzcgNzl2MjVNNjAgNzV2MjlNODMgNzl2MjUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIzIiBvcGFjaXR5PSIuOSIvPjxwYXRoIGQ9Ik0xNCAxMDRoOTIiIHN0cm9rZT0iI2Q4ZGRlNSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L3N2Zz4=" alt="Logo ballon et stade"><span class="brand-jo">JO</span><span class="brand-stadium">STADIUM</span></a>
   <button class="menu" id="menu">☰</button>
-  <nav class="nav" id="nav"><a href="#accueil">Accueil</a><a href="#stade">Le stade</a><a href="#reservation">Réserver</a><a href="#mes-reservations">Mes réservations</a><a href="#admin" class="admin-link" id="adminNavLink">Gestion d’administration</a></nav>
+  <nav class="nav" id="nav"><a href="#accueil">Accueil</a><a href="#stade">Le stade</a><a href="#reservation">Réserver</a><a href="#mes-reservations">Mes réservations</a><a href="/admin" class="admin-link" id="adminNavLink">Gestion d’administration</a></nav>
 </header>
 
 <main>
@@ -440,6 +440,17 @@ async function api(url,options={}){
     if(all.some(b=>b.slot===body.slot&&(b.dates||[]).some(d=>(body.dates||[]).includes(d)))){const e=new Error("Ce créneau est déjà réservé.");e.status=409;throw e;}
     const newBooking={id:Date.now(),...body,createdAt:new Date().toISOString()};all.unshift(newBooking);saveAll(all);return {booking:newBooking};
   }
+  if(url.startsWith('/api/bookings/status')){
+    const query=url.split('?')[1]||'';
+    const ids=new URLSearchParams(query).get('ids')||'';
+    const wanted=ids.split(',').filter(Boolean);
+    const active=new Set(getAll().map(b=>String(b.id)));
+    return {activeIds:wanted.filter(id=>active.has(String(id))),inactiveIds:wanted.filter(id=>!active.has(String(id)))};
+  }
+  if(url.startsWith('/api/bookings/') && url.endsWith('/status')){
+    const id=decodeURIComponent(url.split('/').slice(-2)[0]);
+    return {active:getAll().some(b=>String(b.id)===String(id))};
+  }
   if(url==='/api/admin/login'){
     const body=JSON.parse(options.body||'{}');
     if(body.password==='1234')return {ok:true,token:'demo-local-token'};
@@ -510,20 +521,49 @@ $("form").onsubmit=async e=>{
  }catch(err){console.error(err);if(err.status===409){alert(err.message);await refreshAvailability()}else alert(err.message||"Une erreur est survenue. Vérifie ta connexion puis réessaie.")}
  return false;
 };
-function showTicket(item){if(!item?.dates||!item?.slot)return;$("ticketCode").textContent="JO-"+String(item.id).slice(-6);$("ticketDate").textContent=item.type==="monthly"?`${item.dates.length} séances · ${item.month}`:new Date(item.dates[0]+"T12:00:00").toLocaleDateString("fr-FR");$("ticketSlot").textContent=item.slot;$("ticketPlayers").textContent=item.players+" joueur(s)";$("ticketTotal").textContent=Number(item.total).toLocaleString("fr-FR")+" DA";$("ticketName").textContent=item.name;$("ticketPhone").textContent=item.phone;$("ticketType").textContent=item.type==="monthly"?"Réservation mensuelle":"Réservation simple";$("ticketStatus").className="ticket-status confirmed";$("ticketStatus").textContent="RÉSERVATION CONFIRMÉE";$("ticketModal").classList.remove("hidden")}
+async function showTicket(item){
+ if(!item?.id||!item?.dates||!item?.slot)return;
+ try{
+  const check=await api('/api/bookings/status?ids='+encodeURIComponent(String(item.id)));
+  if(!(check.activeIds||[]).some(id=>String(id)===String(item.id))){
+   removeLocalBooking(item.id);renderList();
+   if(window._lastReservation&&String(window._lastReservation.id)===String(item.id))window._lastReservation=null;
+   alert("Ce ticket n'est plus valide : la réservation a été annulée.");
+   return;
+  }
+ }catch(e){alert("Impossible de vérifier ce ticket auprès du serveur. Vérifie ta connexion puis réessaie.");return;}
+ $("ticketCode").textContent="JO-"+String(item.id).slice(-6);$("ticketDate").textContent=item.type==="monthly"?`${item.dates.length} séances · ${item.month}`:new Date(item.dates[0]+"T12:00:00").toLocaleDateString("fr-FR");$("ticketSlot").textContent=item.slot;$("ticketPlayers").textContent=item.players+" joueur(s)";$("ticketTotal").textContent=Number(item.total).toLocaleString("fr-FR")+" DA";$("ticketName").textContent=item.name;$("ticketPhone").textContent=item.phone;$("ticketType").textContent=item.type==="monthly"?"Réservation mensuelle":"Réservation simple";$("ticketStatus").className="ticket-status confirmed";$("ticketStatus").textContent="RÉSERVATION CONFIRMÉE";window._lastReservation=item;$("ticketModal").classList.remove("hidden");
+}
 function closeTicket(){$("ticketModal").classList.add("hidden")}$('ticketClose').onclick=closeTicket;$('pdfTicket').onclick=()=>window.print();$('showTicketBtn').onclick=()=>{$('modal').classList.add('hidden');if(window._lastReservation)showTicket(window._lastReservation)};
+let ticketSyncBusy=false;
+async function syncClientReservations(){
+ if(ticketSyncBusy)return;
+ const saved=localBookings();
+ if(!saved.length)return;
+ ticketSyncBusy=true;
+ try{
+  const ids=saved.map(b=>String(b.id)).filter(Boolean);
+  const data=await api('/api/bookings/status?ids='+encodeURIComponent(ids.join(',')));
+  const active=new Set((data.activeIds||[]).map(String));
+  const removed=saved.filter(b=>!active.has(String(b.id)));
+  if(removed.length){
+   const wasOpen=removed.some(b=>window._lastReservation&&String(window._lastReservation.id)===String(b.id)&&!$("ticketModal").classList.contains("hidden"));
+   removed.forEach(b=>removeLocalBooking(b.id));
+   renderList();
+   await refreshAvailability();
+   if(wasOpen){
+    $("ticketModal").classList.add("hidden");
+    window._lastReservation=null;
+    alert("Cette réservation a été annulée par l'administration. Le ticket n'est plus valide.");
+   }
+  }
+ }catch(e){console.warn("Synchronisation des tickets momentanément indisponible",e)}
+ finally{ticketSyncBusy=false}
+}
 function renderList(){const arr=localBookings();if(!arr.length){$("list").innerHTML='<div class="empty">Aucune réservation sur cet appareil.</div>';return}$("list").innerHTML=arr.map(b=>{const dateLabel=b.type==="monthly"?`🗓️ ${b.dates.length} séances · ${b.month}`:`📅 ${new Date(b.dates[0]+"T12:00:00").toLocaleDateString("fr-FR")}`;return `<div class="booking-item"><div><h3>JO STADIUM · ${safe(b.slot)}</h3><p>🟢 Confirmée · ${dateLabel} · 👥 ${b.players} joueur(s) · ${safe(b.name)} · ${safe(b.phone)} · <strong>${Number(b.total).toLocaleString("fr-FR")} DA</strong> · ${b.type==="monthly"?"🗓️ Mensuelle":"📅 Simple"}</p></div><button class="cancel" data-ticket="${b.id}" type="button">🎫 Ticket</button></div>`}).join("");document.querySelectorAll("[data-ticket]").forEach(b=>b.onclick=()=>{const item=localBookings().find(x=>String(x.id)===String(b.dataset.ticket));if(item)showTicket(item)})}
 function safe(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 $("menu").onclick=()=>$("nav").classList.toggle("open");
-document.querySelectorAll(".nav a").forEach(a=>a.onclick=()=>{
-  $("nav").classList.remove("open");
-  if(a.id==="adminNavLink"){
-    document.body.classList.add("admin-open");
-    setTimeout(()=>$("admin").scrollIntoView({behavior:"smooth",block:"start"}),0);
-  }else{
-    document.body.classList.remove("admin-open");
-  }
-});
+document.querySelectorAll(".nav a").forEach(a=>a.onclick=()=>{$("nav").classList.remove("open")});
 if(location.hash==="#admin"||location.pathname==="/admin"||location.pathname==="/admin/")document.body.classList.add("admin-open");
 
 function money(n){return Math.round(Number(n)||0).toLocaleString("fr-FR")+" DA";}
@@ -787,7 +827,9 @@ document.querySelectorAll("[data-chart-period]").forEach(btn=>{
 $("adminLogout").onclick=async()=>{await api('/api/admin/logout',{method:'POST'}).catch(()=>{});$("adminPanel").classList.add("hidden-fields");$("adminLogin").classList.remove("hidden-fields");$("adminPassword").value=""};
 document.querySelectorAll("[data-filter]").forEach(btn=>btn.onclick=()=>{adminFilter=btn.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===btn));adminRender()});
 function closeModal(){$("modal").classList.add("hidden")}$('close').onclick=closeModal;$('ok').onclick=closeModal;$('modal').onclick=e=>{if(e.target.id==='modal')closeModal()};
-renderList();updateTotal();refreshAvailability();
+renderList();updateTotal();refreshAvailability();syncClientReservations();
+setInterval(syncClientReservations,5000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)syncClientReservations()});
 </script>
 </body>
 </html>

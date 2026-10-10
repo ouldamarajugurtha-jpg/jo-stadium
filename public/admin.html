@@ -1,297 +1,119 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JO STADIUM - Administration</title>
-  <style>
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #101820;
-      color: #fff;
-    }
-
-    header {
-      background: #172631;
-      padding: 22px 15px;
-      text-align: center;
-      border-bottom: 3px solid #f4a340;
-    }
-
-    h1 { color: #f4a340; margin: 0; }
-
-    main {
-      max-width: 900px;
-      margin: 25px auto;
-      padding: 15px;
-    }
-
-    .card {
-      background: #1b2b36;
-      border: 1px solid #344955;
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
-    }
-
-    input, button, select {
-      width: 100%;
-      padding: 12px;
-      margin-top: 10px;
-      border-radius: 7px;
-      font-size: 16px;
-    }
-
-    input, select {
-      border: 1px solid #657985;
-      background: #fff;
-      color: #111;
-    }
-
-    button, .link {
-      border: 0;
-      background: #f4a340;
-      color: #101820;
-      font-weight: bold;
-      cursor: pointer;
-      text-align: center;
-      text-decoration: none;
-      display: block;
-    }
-
-    .link {
-      padding: 12px;
-      border-radius: 7px;
-      margin-bottom: 15px;
-    }
-
-    .table-wrap { overflow-x: auto; }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 600px;
-    }
-
-    th, td {
-      padding: 12px;
-      border-bottom: 1px solid #40515c;
-      text-align: left;
-    }
-
-    th { color: #f4a340; }
-
-    .delete {
-      width: auto;
-      margin: 0;
-      padding: 8px 12px;
-      background: #e45c5c;
-      color: white;
-    }
-
-    #message { line-height: 1.5; }
-
-    .muted { color: #bdc7ce; }
-
-    footer {
-      text-align: center;
-      padding: 20px;
-      color: #bbb;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080b10">
+<title>JO STADIUM — Administration</title>
+<style>
+:root{--bg:#080b10;--panel:#111720;--panel2:#171f2a;--line:#293341;--text:#f5f7fb;--muted:#9ca8b8;--red:#ff443b;--green:#39d99a;--yellow:#f7c75e}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top right,#17202d 0,transparent 38%),var(--bg);color:var(--text);font:15px/1.5 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}button,a{ -webkit-tap-highlight-color:transparent}a{color:inherit;text-decoration:none}.shell{width:min(1200px,100% - 32px);margin:auto}.topbar{position:sticky;top:0;z-index:10;background:#080b10ed;backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}.topinner{min-height:72px;display:flex;align-items:center;justify-content:space-between;gap:14px}.brand{font-size:23px;font-weight:950;letter-spacing:-1px}.brand span{color:var(--red)}.top-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.btn{border:1px solid var(--line);background:#121821;color:var(--text);border-radius:11px;padding:10px 14px;font-weight:800;cursor:pointer}.btn.primary{background:var(--red);border-color:var(--red);color:white}.btn.danger{color:#ff9994;border-color:#6a3538;background:#241719}.btn:disabled{opacity:.55;cursor:wait}.intro{padding:30px 0 20px}.eyebrow{font-size:11px;letter-spacing:2px;font-weight:900;color:var(--red);margin:0 0 8px}.intro h1{font-size:clamp(28px,4vw,40px);line-height:1.08;letter-spacing:-1.5px;margin:0}.intro p:last-child{color:var(--muted);margin:10px 0 0}.notice{display:none;padding:12px 14px;border:1px solid #754044;border-radius:12px;background:#281719;color:#ffd2d0;margin:14px 0}.notice.show{display:block}.login-wrap{max-width:430px;margin:38px auto 80px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 25px 80px #0005}.login-wrap h2{margin:0 0 6px}.login-wrap p{color:var(--muted);margin:0 0 20px}.field{display:flex;flex-direction:column;gap:7px;color:#dfe5ed;font-size:13px;font-weight:750}.field input,.field select{width:100%;min-height:45px;border:1px solid #35404f;border-radius:10px;background:#090e15;color:var(--text);padding:10px 12px;outline:none}.field input:focus,.field select:focus{border-color:var(--red)}.login-wrap .btn{width:100%;margin-top:14px;min-height:46px}.dashboard{padding-bottom:60px}.hidden{display:none!important}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:10px 0 24px}.stat{background:linear-gradient(145deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:17px;min-width:0}.stat-label{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px;font-weight:800;gap:8px}.stat-icon{font-size:20px}.stat strong{display:block;font-size:clamp(21px,2.5vw,30px);letter-spacing:-.8px;margin-top:9px;overflow-wrap:anywhere}.stat small{display:block;color:var(--muted);margin-top:4px}.toolbar{display:grid;grid-template-columns:minmax(180px,1.5fr) minmax(150px,.8fr) minmax(145px,.7fr) auto;gap:10px;background:var(--panel);border:1px solid var(--line);padding:14px;border-radius:16px;margin-bottom:15px}.toolbar .btn{align-self:end;min-height:45px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:20px 0 12px}.section-head h2{margin:0;font-size:20px}.count{color:var(--muted);font-size:12px}.booking-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.booking{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:17px;min-width:0}.booking-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.booking h3{font-size:17px;margin:0;overflow-wrap:anywhere}.badge{display:inline-flex;align-items:center;gap:6px;background:#10271f;color:#78e8b6;border:1px solid #235c46;border-radius:999px;padding:5px 8px;font-size:10px;font-weight:900;white-space:nowrap}.booking-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}.meta-item{min-width:0}.meta-item small{display:block;color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.8px;margin-bottom:3px}.meta-item strong{font-size:13px;overflow-wrap:anywhere}.booking-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:13px}.amount{font-weight:950;font-size:18px}.actions{display:flex;gap:7px}.actions .btn{padding:9px 11px;font-size:12px}.empty{border:1px dashed #3a4655;border-radius:15px;padding:32px 15px;text-align:center;color:var(--muted);grid-column:1/-1}.footnote{font-size:11px;color:var(--muted);padding:20px 0 0}.modal{position:fixed;inset:0;background:#000b;z-index:30;display:grid;place-items:center;padding:18px}.modal-card{width:min(460px,100%);background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 25px 80px #0008}.modal-card h2{margin:0 0 16px}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.detail-grid div{min-width:0}.detail-grid small{display:block;color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.8px}.detail-grid strong{overflow-wrap:anywhere}.modal-actions{display:flex;gap:8px;margin-top:22px}.modal-actions .btn{flex:1}@media(max-width:850px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.toolbar{grid-template-columns:1fr 1fr}.toolbar .search{grid-column:1/-1}.booking-list{grid-template-columns:1fr}}@media(max-width:520px){.shell{width:calc(100% - 22px)}.topinner{min-height:64px}.brand{font-size:20px}.top-actions{gap:6px}.top-actions .btn{font-size:11px;padding:9px}.intro{padding-top:23px}.stat{padding:13px}.stat strong{font-size:22px}.toolbar{grid-template-columns:1fr}.toolbar .search{grid-column:auto}.booking{padding:14px}.booking-foot{align-items:flex-start;flex-direction:column}.actions{width:100%}.actions .btn{flex:1}.booking-meta{gap:10px}}
+</style>
 </head>
 <body>
-
-<header>
-  <h1>JO STADIUM</h1>
-  <p>Gestion d’administration</p>
-</header>
-
-<main>
-  <a class="link" href="/">← Retour aux réservations</a>
-
-  <section class="card">
-    <h2>Accès administrateur</h2>
-    <p class="muted">
-      Entrez le mot de passe administrateur configuré sur le serveur.
-    </p>
-    <input
-      id="adminPassword"
-      type="password"
-      placeholder="Mot de passe administrateur"
-      autocomplete="current-password"
-    >
-    <button id="connectBtn" type="button">Accéder aux réservations</button>
-    <p id="message" role="status"></p>
-  </section>
-
-  <section class="card">
-    <h2>Réservations</h2>
-    <button id="refreshBtn" type="button">Actualiser la liste</button>
-    <p id="count">Aucune donnée chargée.</p>
-
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Nom</th>
-            <th>Téléphone</th>
-            <th>Date</th>
-            <th>Créneau</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="bookings">
-          <tr>
-            <td colspan="5">Connectez-vous pour afficher les réservations.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+<header class="topbar"><div class="shell topinner"><a class="brand" href="/">JO <span>STADIUM</span> <small style="font-size:10px;color:#9ca8b8;letter-spacing:1px">ADMIN</small></a><div class="top-actions"><a class="btn" href="/">← Retour au site</a><button class="btn hidden" id="refreshBtn">↻ Actualiser</button><button class="btn hidden" id="logoutBtn">Déconnexion</button></div></div></header>
+<main class="shell">
+<section class="intro"><p class="eyebrow">ESPACE PRIVÉ</p><h1>Gestion d’administration</h1><p>Réservations, créneaux et recettes — tout au même endroit.</p></section>
+<div id="notice" class="notice" role="status"></div>
+<section id="loginPanel" class="login-wrap"><h2>Connexion administrateur</h2><p>Entre le mot de passe d’administration pour consulter les réservations.</p><form id="loginForm"><label class="field">Mot de passe<input id="password" type="password" autocomplete="current-password" required placeholder="Mot de passe"></label><button class="btn primary" id="loginBtn" type="submit">🔐 Ouvrir le tableau de bord</button></form></section>
+<section id="dashboard" class="dashboard hidden">
+<div class="stats">
+<article class="stat"><div class="stat-label"><span>Réservations actives</span><span class="stat-icon">🎫</span></div><strong id="statBookings">0</strong><small>Confirmées sur le serveur</small></article>
+<article class="stat"><div class="stat-label"><span>Séances réservées</span><span class="stat-icon">⚽</span></div><strong id="statSessions">0</strong><small>Toutes les dates incluses</small></article>
+<article class="stat"><div class="stat-label"><span>Recettes prévues</span><span class="stat-icon">💰</span></div><strong id="statRevenue">0 DA</strong><small>100 DA par joueur et par séance</small></article>
+<article class="stat"><div class="stat-label"><span>Séances à venir</span><span class="stat-icon">📅</span></div><strong id="statUpcoming">0</strong><small>À partir d’aujourd’hui</small></article>
+</div>
+<div class="toolbar">
+<label class="field search">Rechercher un client<input id="searchInput" type="search" placeholder="Nom, téléphone, ticket…"></label>
+<label class="field">Filtrer par date<input id="dateFilter" type="date"></label>
+<label class="field">Type de réservation<select id="typeFilter"><option value="">Tous les types</option><option value="single">Séance simple</option><option value="monthly">Mensuelle</option></select></label>
+<button class="btn" id="clearBtn" type="button">Effacer les filtres</button>
+</div>
+<div class="section-head"><h2>Réservations</h2><span class="count" id="resultCount">0 réservation</span></div>
+<div id="bookingList" class="booking-list"><div class="empty">Chargement des réservations…</div></div>
+<p class="footnote">Les annulations sont enregistrées sur le serveur. Après confirmation, le ticket en ligne devient invalide et le créneau est libéré pour les clients.</p>
+</section>
 </main>
-
-<footer>JO STADIUM — Administration</footer>
-
+<div id="detailModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="modal-card"><p class="eyebrow">DÉTAILS</p><h2 id="detailTitle">Réservation</h2><div class="detail-grid" id="detailGrid"></div><div class="modal-actions"><button class="btn" id="closeDetail" type="button">Fermer</button><button class="btn danger" id="detailCancel" type="button">✕ Annuler la réservation</button></div></div></div>
 <script>
-  const passwordInput = document.getElementById('adminPassword');
-  const message = document.getElementById('message');
-  const bookingsBody = document.getElementById('bookings');
-  const count = document.getElementById('count');
-
-  let connected = false;
-
-  async function loadBookings() {
-    if (!connected) {
-      message.textContent = 'Entrez le mot de passe administrateur.';
-      return;
-    }
-
-    message.textContent = 'Chargement...';
-
-    try {
-      const response = await fetch('/api/bookings', {
-        headers: {
-          'x-admin-password': passwordInput.value
-        }
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || result.error || 'Accès refusé.');
-      }
-
-      const list = Array.isArray(result)
-        ? result
-        : (result.bookings || []);
-
-      bookingsBody.replaceChildren();
-
-      if (list.length === 0) {
-        const row = bookingsBody.insertRow();
-        const cell = row.insertCell();
-        cell.colSpan = 5;
-        cell.textContent = 'Aucune réservation pour le moment.';
-      } else {
-        list.forEach(booking => {
-          const row = bookingsBody.insertRow();
-
-          [
-            booking.name || '',
-            booking.phone || '',
-            booking.date || '',
-            booking.time || ''
-          ].forEach(value => {
-            const cell = row.insertCell();
-            cell.textContent = value;
-          });
-
-          const actionCell = row.insertCell();
-          const deleteButton = document.createElement('button');
-          deleteButton.className = 'delete';
-          deleteButton.textContent = 'Supprimer';
-
-          deleteButton.addEventListener('click', () => {
-            deleteBooking(booking.id);
-          });
-
-          actionCell.appendChild(deleteButton);
-        });
-      }
-
-      count.textContent = 'Nombre de réservations : ' + list.length;
-      message.textContent = 'Liste actualisée.';
-    } catch (error) {
-      message.textContent =
-        error.message === 'Failed to fetch'
-          ? 'Le serveur ne répond pas.'
-          : error.message;
-
-      bookingsBody.replaceChildren();
-      const row = bookingsBody.insertRow();
-      const cell = row.insertCell();
-      cell.colSpan = 5;
-      cell.textContent = 'Impossible de charger les réservations.';
-    }
-  }
-
-  async function deleteBooking(id) {
-    if (id === undefined || id === null) {
-      message.textContent =
-        'Cette réservation ne possède pas d’identifiant. Suppression indisponible.';
-      return;
-    }
-
-    if (!confirm('Voulez-vous vraiment supprimer cette réservation ?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        '/api/bookings/' + encodeURIComponent(id),
-        {
-          method: 'DELETE',
-          headers: {
-            'x-admin-password': passwordInput.value
-          }
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || result.error || 'Suppression impossible.');
-      }
-
-      message.textContent = 'Réservation supprimée.';
-      await loadBookings();
-    } catch (error) {
-      message.textContent = error.message;
-    }
-  }
-
-  document.getElementById('connectBtn').addEventListener('click', async () => {
-    if (!passwordInput.value) {
-      message.textContent = 'Veuillez entrer le mot de passe.';
-      return;
-    }
-
-    connected = true;
-    await loadBookings();
-  });
-
-  document.getElementById('refreshBtn').addEventListener('click', loadBookings);
-
-  passwordInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      document.getElementById('connectBtn').click();
-    }
-  });
+const $=id=>document.getElementById(id);
+let bookings=[], selectedBooking=null, loading=false;
+const token=()=>localStorage.getItem("joStadiumAdminToken")||"";
+function safe(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function money(n){return Math.round(Number(n)||0).toLocaleString("fr-FR")+" DA"}
+function todayISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function dateLabel(d){return new Date(d+"T12:00:00").toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"})}
+function datesOf(b){return Array.isArray(b.dates)?b.dates:[]}
+function api(url,options={}){return fetch(url,{...options,headers:{"Content-Type":"application/json",...(token()?{"x-admin-token":token()}:{}),...(options.headers||{})},cache:"no-store"}).then(async r=>{const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||`Erreur serveur (${r.status})`);e.status=r.status;throw e}return data})}
+function notice(msg){$("notice").textContent=msg;$("notice").classList.add("show")}
+function clearNotice(){$("notice").textContent="";$("notice").classList.remove("show")}
+function setLoggedIn(yes){$("loginPanel").classList.toggle("hidden",yes);$("dashboard").classList.toggle("hidden",!yes);$("refreshBtn").classList.toggle("hidden",!yes);$("logoutBtn").classList.toggle("hidden",!yes)}
+$("loginForm").addEventListener("submit",async e=>{e.preventDefault();clearNotice();$("loginBtn").disabled=true;try{const r=await api("/api/admin/login",{method:"POST",body:JSON.stringify({password:$("password").value})});if(!r.token)throw new Error("Le serveur n’a pas confirmé la connexion.");localStorage.setItem("joStadiumAdminToken",r.token);$("password").value="";setLoggedIn(true);await loadBookings()}catch(err){notice(err.message||"Connexion impossible.")}finally{$("loginBtn").disabled=false}});
+async function loadBookings(){
+ if(loading)return;loading=true;$("refreshBtn").disabled=true;
+ try{const data=await api("/api/admin/bookings");bookings=Array.isArray(data.bookings)?data.bookings:[];setLoggedIn(true);renderStats();renderBookings();clearNotice()}
+ catch(e){if(e.status===401){localStorage.removeItem("joStadiumAdminToken");setLoggedIn(false);notice("Ta session a expiré. Connecte-toi à nouveau.")}else notice(e.message||"Impossible de charger les réservations. Vérifie la connexion au serveur.")}
+ finally{loading=false;$("refreshBtn").disabled=false}
+}
+function renderStats(){
+ const sessions=bookings.reduce((n,b)=>n+datesOf(b).length,0);
+ const revenue=bookings.reduce((n,b)=>n+(Number(b.players)||0)*100*datesOf(b).length,0);
+ const today=todayISO();
+ const upcoming=bookings.reduce((n,b)=>n+datesOf(b).filter(d=>d>=today).length,0);
+ $("statBookings").textContent=bookings.length.toLocaleString("fr-FR");
+ $("statSessions").textContent=sessions.toLocaleString("fr-FR");
+ $("statRevenue").textContent=money(revenue);
+ $("statUpcoming").textContent=upcoming.toLocaleString("fr-FR");
+}
+function filteredBookings(){
+ const q=$("searchInput").value.trim().toLocaleLowerCase("fr");
+ const date=$("dateFilter").value, type=$("typeFilter").value;
+ return bookings.filter(b=>{
+  const hay=[b.name,b.phone,b.id,"JO-"+String(b.id).slice(-6),b.slot].join(" ").toLocaleLowerCase("fr");
+  if(q&&!hay.includes(q))return false;
+  if(date&&!datesOf(b).includes(date))return false;
+  if(type&&b.type!==type)return false;
+  return true;
+ }).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+}
+function renderBookings(){
+ const arr=filteredBookings();$("resultCount").textContent=`${arr.length} réservation${arr.length>1?"s":""}`;
+ if(!arr.length){$("bookingList").innerHTML='<div class="empty">Aucune réservation ne correspond à ces filtres.</div>';return}
+ $("bookingList").innerHTML=arr.map(b=>{
+  const ds=datesOf(b);const dateText=b.type==="monthly"?`${ds.length} séances · ${safe(b.month||"mois choisi")}`:ds.map(dateLabel).join(", ");
+  return `<article class="booking"><div class="booking-top"><div><h3>${safe(b.name)}</h3><div style="color:var(--muted);font-size:12px;margin-top:3px">${safe(b.phone)}</div></div><span class="badge">● CONFIRMÉE</span></div><div class="booking-meta"><div class="meta-item"><small>DATE(S)</small><strong>${dateText}</strong></div><div class="meta-item"><small>CRÉNEAU</small><strong>${safe(b.slot)}</strong></div><div class="meta-item"><small>JOUEURS</small><strong>${Number(b.players)||0} joueur(s)</strong></div><div class="meta-item"><small>RÉFÉRENCE</small><strong>JO-${safe(String(b.id).slice(-6))}</strong></div></div><div class="booking-foot"><div><div style="color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.8px">TOTAL</div><div class="amount">${money(b.total)}</div></div><div class="actions"><button class="btn" data-details="${safe(b.id)}" type="button">Détails</button><button class="btn danger" data-cancel="${safe(b.id)}" type="button">Annuler</button></div></div></article>`;
+ }).join("");
+ document.querySelectorAll("[data-details]").forEach(btn=>btn.onclick=()=>showDetails(btn.dataset.details));
+ document.querySelectorAll("[data-cancel]").forEach(btn=>btn.onclick=()=>cancelBooking(btn.dataset.cancel));
+}
+function showDetails(id){
+ const b=bookings.find(x=>String(x.id)===String(id));if(!b)return;selectedBooking=b;
+ const ds=datesOf(b);
+ const values=[["Client",b.name],["Téléphone",b.phone],["Référence","JO-"+String(b.id).slice(-6)],["Type",b.type==="monthly"?"Réservation mensuelle":"Séance simple"],["Date(s)",ds.map(dateLabel).join(", ")],["Créneau",b.slot],["Joueurs",`${b.players} joueur(s)`],["Montant",money(b.total)],["Créée le",b.createdAt?new Date(b.createdAt).toLocaleString("fr-FR"):"—"]];
+ $("detailTitle").textContent="Réservation JO-"+String(b.id).slice(-6);
+ $("detailGrid").innerHTML=values.map(([label,value])=>`<div><small>${safe(label)}</small><strong>${safe(value)}</strong></div>`).join("");
+ $("detailModal").classList.remove("hidden");
+}
+async function cancelBooking(id){
+ const b=bookings.find(x=>String(x.id)===String(id));if(!b)return;
+ if(!confirm(`Confirmer l’annulation de la réservation de ${b.name} ?\n\nLe ticket en ligne sera invalidé et le créneau sera libéré uniquement après confirmation du serveur.`))return;
+ try{
+  await api("/api/admin/bookings/"+encodeURIComponent(id),{method:"DELETE"});
+  bookings=bookings.filter(x=>String(x.id)!==String(id));
+  if(selectedBooking&&String(selectedBooking.id)===String(id)){$("detailModal").classList.add("hidden");selectedBooking=null}
+  renderStats();renderBookings();notice("Réservation annulée avec succès. Le ticket en ligne est désormais invalide et le créneau est disponible.");
+ }catch(e){notice(e.message||"L’annulation a échoué. Vérifie la connexion puis actualise.");}
+}
+$("detailCancel").onclick=()=>selectedBooking&&cancelBooking(selectedBooking.id);
+$("closeDetail").onclick=()=>$("detailModal").classList.add("hidden");
+$("detailModal").addEventListener("click",e=>{if(e.target.id==="detailModal")$("detailModal").classList.add("hidden")});
+$("searchInput").addEventListener("input",renderBookings);$("dateFilter").addEventListener("change",renderBookings);$("typeFilter").addEventListener("change",renderBookings);
+$("clearBtn").onclick=()=>{$("searchInput").value="";$("dateFilter").value="";$("typeFilter").value="";renderBookings()};
+$("refreshBtn").onclick=loadBookings;
+$("logoutBtn").onclick=async()=>{try{await api("/api/admin/logout",{method:"POST"})}catch{}localStorage.removeItem("joStadiumAdminToken");bookings=[];setLoggedIn(false);clearNotice();notice("Tu es déconnecté.")};
+if(token()){setLoggedIn(true);loadBookings()}
+setInterval(()=>{if(token()&&!document.hidden)loadBookings()},15000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&token())loadBookings()});
 </script>
-
 </body>
 </html>

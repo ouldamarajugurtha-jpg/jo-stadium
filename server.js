@@ -72,6 +72,22 @@ app.get("/api/availability", (req, res) => {
   }
   res.json({ booked });
 });
+// Vérification publique du statut : un ticket ne reste valide que tant que la réservation existe.
+app.get("/api/bookings/status", (req, res) => {
+  const ids = String(req.query.ids || "").split(",").map(x => x.trim()).filter(Boolean).slice(0, 100);
+  const bookings = safeRead(res); if (!bookings) return;
+  const active = new Set(bookings.map(b => String(b.id)));
+  const activeIds = ids.filter(id => active.has(id));
+  res.set("Cache-Control", "no-store");
+  res.json({ activeIds, inactiveIds: ids.filter(id => !active.has(id)) });
+});
+app.get("/api/bookings/:id/status", (req, res) => {
+  const bookings = safeRead(res); if (!bookings) return;
+  const active = bookings.some(b => String(b.id) === String(req.params.id));
+  res.set("Cache-Control", "no-store");
+  res.json({ active });
+});
+
 app.post("/api/bookings", (req, res) => {
   const body = req.body || {};
   if (!validBooking(body)) return res.status(400).json({ error: "Réservation invalide : vérifie la date, l’horaire, le nom, le téléphone et le nombre de joueurs." });
@@ -116,6 +132,6 @@ app.delete("/api/admin/bookings/:id", adminAuth, (req, res) => {
   res.json({ ok: true, deletedId: id, booking: deleted });
 });
 app.post("/api/admin/logout", adminAuth, (_req, res) => res.json({ ok: true }));
-app.get(["/admin", "/admin/", "/admin.html"], (_req, res) => res.redirect(302, "/#admin"));
+app.get(["/admin", "/admin/"], (_req, res) => res.sendFile(path.join(appHtml, "admin.html")));
 app.get("*", (_req, res) => res.sendFile(path.join(appHtml, "index.html")));
 app.listen(PORT, "0.0.0.0", () => console.log(`JO STADIUM démarré sur le port ${PORT}`));

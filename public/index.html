@@ -400,7 +400,7 @@ body.admin-open .admin-section{display:block}
  // Créneaux horaires originaux : ne pas modifier les heures du stade.
  const times=["16:00 - 17:00","17:00 - 18:00","18:00 - 19:00","19:00 - 20:00"];
 const PRICE=100,$=x=>document.getElementById(x),today=(()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`})();
-let selected="",bookingType="single",serverBookings=[];
+let selected="",bookingType="single",serverBookings=[],serverClosed=[];
 const LOCAL_KEY="joStadiumMyBookings";
 $("date").min=today;$(("date")).value=today;
 const now=new Date();
@@ -478,11 +478,16 @@ function removeLocalBooking(id){
 }
 async function refreshAvailability(){
   const dates=datesForCurrent().filter(Boolean);
-  if(!dates.length){serverBookings=[];renderSlots();return}
+  if(!dates.length){serverBookings=[];serverClosed=[];renderSlots();return}
   try{
     const data=await api('/api/availability?dates='+encodeURIComponent(dates.join(',')));
-    serverBookings=data.booked.map(x=>({dates:[x.date],slot:x.slot}));
-  }catch(e){console.error(e);serverBookings=[];}
+    serverBookings=(data.booked||[]).map(x=>({dates:[x.date],slot:x.slot}));
+    serverClosed=(data.closed||[]).map(x=>({date:x.date,slot:x.slot}));
+  }catch(e){
+    console.error(e);
+    serverBookings=[];
+    serverClosed=[];
+  }
   renderSlots();
 }
 function datesForMonth(month,weekday){
@@ -492,10 +497,19 @@ function datesForMonth(month,weekday){
  return out;
 }
 function isBooked(date,slot){return serverBookings.some(b=>b.slot===slot&&b.dates?.includes(date))}
+function isClosed(date,slot){return serverClosed.some(b=>b.date===date&&b.slot===slot)}
 function datesForCurrent(){return bookingType==="monthly"?datesForMonth($("month").value,$("weekday").value):[$("date").value]}
 function renderSlots(){
  const dates=datesForCurrent();
- $("slots").innerHTML=times.map(t=>{const busy=dates.length>0&&dates.some(d=>isBooked(d,t));return `<button type="button" class="slot ${selected===t?"selected":""} ${busy?"busy":""}" ${busy?"disabled":""} data-slot="${t}">${t}${busy?" · Réservé":""}</button>`}).join("");
+ const closedForSelection=t=>dates.length>0&&dates.some(d=>isClosed(d,t));
+ if(selected&&closedForSelection(selected))selected="";
+ $("slots").innerHTML=times.map(t=>{
+   const busy=dates.length>0&&dates.some(d=>isBooked(d,t));
+   const closed=closedForSelection(t);
+   const disabled=busy||closed;
+   const label=busy?" · Réservé":closed?" · Fermé":"";
+   return `<button type="button" class="slot ${selected===t?"selected":""} ${disabled?"busy":""}" ${disabled?"disabled":""} data-slot="${t}">${t}${label}</button>`;
+ }).join("");
  document.querySelectorAll("[data-slot]").forEach(b=>b.onclick=()=>{selected=b.dataset.slot;renderSlots();updateTotal()});
  updateMonthlyInfo();
 }
@@ -829,6 +843,7 @@ document.querySelectorAll("[data-filter]").forEach(btn=>btn.onclick=()=>{adminFi
 function closeModal(){$("modal").classList.add("hidden")}$('close').onclick=closeModal;$('ok').onclick=closeModal;$('modal').onclick=e=>{if(e.target.id==='modal')closeModal()};
 renderList();updateTotal();refreshAvailability();syncClientReservations();
 setInterval(syncClientReservations,5000);
+setInterval(refreshAvailability,30000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)syncClientReservations()});
 </script>
 </body>

@@ -37,6 +37,16 @@ const STADIUM_TIMEZONE = "Africa/Algiers";
 const appHtml = path.join(__dirname, "public");
 
 app.use(express.json({ limit: "5mb" }));
+// Les pages HTML sont servies sans cache afin que les mises à jour Render
+// apparaissent aussi sur les navigateurs mobiles qui gardent parfois une ancienne page.
+app.use((req, res, next) => {
+  if (req.path.endsWith(".html") || ["/", "/admin", "/admin/", "/admin/tournois", "/admin/tournois/", "/tournois", "/tournois/"].includes(req.path)) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
 app.use(express.static(appHtml));
 
 /*

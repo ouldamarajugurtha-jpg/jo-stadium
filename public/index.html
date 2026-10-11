@@ -197,6 +197,13 @@ footer{border-top:1px solid var(--line);padding:42px max(20px,6vw);display:grid;
 /* Administration séparée visuellement et accessible depuis le menu */
 .admin-section{display:none}
 body.admin-open .admin-section{display:block}
+
+/* BaridiMob payment panel — aligned with JO STADIUM dark/red identity */
+.payment-panel{border:1px solid #303946;border-radius:16px;padding:17px;margin:4px 0 18px;background:linear-gradient(145deg,#141a23,#0b1016);box-shadow:inset 0 1px 0 #ffffff08}
+.payment-heading{display:flex;align-items:center;gap:10px;margin-bottom:13px;font-size:16px}.payment-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:rgba(255,59,48,.13);border:1px solid rgba(255,59,48,.28);color:#ff5148;font-size:20px;font-weight:900}
+.payment-choice{display:flex;align-items:center;gap:11px;margin:8px 0;padding:11px 12px;border:1px solid #303946;border-radius:11px;background:#0b1016;cursor:pointer;transition:border-color .2s,background .2s}.payment-choice:has(input:checked){border-color:#ff3b30;background:rgba(255,59,48,.075)}.payment-choice input{width:18px;height:18px;accent-color:#ff3b30;margin:0;flex:0 0 auto}.payment-choice span{display:flex;flex-direction:column;gap:1px}.payment-choice b{font-size:13px}.payment-choice small{font-size:11px;color:#98a3b3;font-weight:500}.baridi-fields{margin-top:15px;padding-top:15px;border-top:1px solid #252d39}.payment-recipient,.rip-row{padding:12px;border:1px solid #29323e;border-radius:11px;background:#090e15}.payment-recipient small,.rip-row small{display:block;color:#98a3b3;font-size:9px;font-weight:900;letter-spacing:1.1px;margin-bottom:4px}.payment-recipient strong,.rip-row strong{font-size:13px;overflow-wrap:anywhere}.rip-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}.copy-rip{padding:8px 12px;flex:0 0 auto;border:1px solid #ff3b30;color:#fff;background:rgba(255,59,48,.12)}.payment-hint{font-size:12px;line-height:1.55;color:#c7d0dc;margin:11px 0 14px}.payment-panel label:not(.payment-choice){margin-top:12px}.label-note{color:#98a3b3;font-size:10px;font-weight:600}.payment-panel input[type=file]{font-size:12px;padding:10px}.payment-notice{display:flex;align-items:flex-start;gap:9px;border:1px solid #543034;border-radius:10px;background:rgba(255,59,48,.065);padding:10px 11px;margin-top:12px;color:#c7d0dc}.payment-notice>span{color:#ff655d;font-weight:900}.payment-notice p{font-size:11px;line-height:1.55;margin:0}.payment-notice b{color:#fff}
+@media(max-width:650px){.payment-panel{padding:13px;border-radius:14px}.payment-heading{font-size:15px}.payment-choice{padding:10px}.payment-recipient strong,.rip-row strong{font-size:12px}.rip-row{align-items:flex-start}.copy-rip{font-size:12px;padding:8px 10px}}
+
 </style>
 </head>
 <body>
@@ -277,15 +284,17 @@ body.admin-open .admin-section{display:block}
       <label>Nom complet<input id="name" required placeholder="Ex. Mohamed Benali"></label>
     </div>
     <label>Téléphone<input id="phone" type="tel" required placeholder="0550 00 00 00"></label>
-    <div style="border:1px solid #303946;border-radius:12px;padding:14px;margin:4px 0 16px;background:#0b1016">
-      <strong style="display:block;margin-bottom:10px">Mode de paiement</strong>
-      <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input style="width:auto;margin:0" type="radio" name="paymentMethod" value="baridimob" checked> BaridiMob (transfert + justificatif)</label>
-      <label style="display:flex;align-items:center;gap:8px;margin:8px 0 0"><input style="width:auto;margin:0" type="radio" name="paymentMethod" value="on_site"> Paiement sur place</label>
-      <div id="baridiFields" style="margin-top:14px">
-        <p style="font-size:12px;line-height:1.6;color:#c7d0dc;margin:0 0 10px">Bénéficiaire : <strong>OULD AMARA JUGURTHA</strong><br>RIP : <strong>00799999002247451891</strong> <button type="button" class="btn" id="copyRip" style="padding:5px 8px;margin-left:4px">Copier</button><br>Transfère le montant exact, puis joins le reçu et sa référence.</p>
+    <div class="payment-panel">
+      <div class="payment-heading"><span class="payment-icon">↗</span><strong>Mode de paiement</strong></div>
+      <label class="payment-choice"><input type="radio" name="paymentMethod" value="baridimob" checked><span><b>BaridiMob</b><small>Transfert + justificatif</small></span></label>
+      <label class="payment-choice"><input type="radio" name="paymentMethod" value="on_site"><span><b>Paiement sur place</b><small>Règlement au stade</small></span></label>
+      <div id="baridiFields" class="baridi-fields">
+        <div class="payment-recipient"><small>BÉNÉFICIAIRE</small><strong>OULD AMARA JUGURTHA</strong></div>
+        <div class="rip-row"><div><small>RIP</small><strong>00799999002247451891</strong></div><button type="button" class="btn copy-rip" id="copyRip">Copier</button></div>
+        <p class="payment-hint">Transfère le montant exact, puis joins le reçu et sa référence.</p>
         <label>Référence de transaction<input id="transactionReference" maxlength="100" required placeholder="Référence indiquée dans BaridiMob"></label>
-        <label>Justificatif du transfert (image, 2 Mo max)<input id="receiptFile" type="file" accept="image/jpeg,image/png,image/webp" required></label>
-        <small style="display:block;color:#aeb8c6;line-height:1.5">Le ticket est délivré dès l’envoi. Le paiement restera « À vérifier » jusqu’au contrôle manuel.</small>
+        <label>Justificatif du transfert <span class="label-note">Image · 2 Mo max</span><input id="receiptFile" type="file" accept="image/jpeg,image/png,image/webp" required></label>
+        <div class="payment-notice"><span>ⓘ</span><p>Le ticket est délivré dès l’envoi. Le paiement restera <b>« À vérifier »</b> jusqu’au contrôle manuel.</p></div>
       </div>
     </div>
     <div class="total"><span>Total <small id="totalHint"></small></span><strong id="total">600 DA</strong></div>

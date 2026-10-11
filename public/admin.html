@@ -41,7 +41,7 @@
 <p class="footnote">Les annulations sont enregistrées sur le serveur. Après confirmation, le ticket en ligne devient invalide et le créneau est libéré pour les clients.</p>
 </section>
 </main>
-<div id="detailModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="modal-card"><p class="eyebrow">DÉTAILS</p><h2 id="detailTitle">Réservation</h2><div class="detail-grid" id="detailGrid"></div><div class="modal-actions"><button class="btn" id="closeDetail" type="button">Fermer</button><button class="btn danger" id="detailCancel" type="button">✕ Annuler la réservation</button></div></div></div>
+<div id="detailModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="modal-card"><p class="eyebrow">DÉTAILS</p><h2 id="detailTitle">Réservation</h2><div class="detail-grid" id="detailGrid"></div><div id="paymentControls" style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px"><h3 style="margin:0 0 10px">Paiement</h3><div id="receiptPreview" style="margin-bottom:12px"></div><label class="field">Mettre à jour le statut<select id="paymentStatusSelect"><option value="pending">À vérifier</option><option value="verified">Vérifié / payé</option><option value="on_site">À régler sur place</option><option value="rejected">Refusé</option></select></label><button class="btn primary" id="savePaymentStatus" type="button" style="width:100%;margin-top:10px">Enregistrer le statut du paiement</button></div><div class="modal-actions"><button class="btn" id="closeDetail" type="button">Fermer</button><button class="btn danger" id="detailCancel" type="button">✕ Annuler la réservation</button></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
 let bookings=[], selectedBooking=null, loading=false;
@@ -103,7 +103,7 @@ function renderBookings(){
  if(!arr.length){$("bookingList").innerHTML='<div class="empty">Aucune réservation ne correspond à ces filtres.</div>';return}
  $("bookingList").innerHTML=arr.map(b=>{
   const ds=datesOf(b);const dateText=b.type==="monthly"?`${ds.length} séances · ${safe(b.month||"mois choisi")}`:ds.map(dateLabel).join(", ");
-  return `<article class="booking"><div class="booking-top"><div><h3>${safe(b.name)}</h3><div style="color:var(--muted);font-size:12px;margin-top:3px">${safe(b.phone)}</div></div><span class="badge">● CONFIRMÉE</span></div><div class="booking-meta"><div class="meta-item"><small>DATE(S)</small><strong>${dateText}</strong></div><div class="meta-item"><small>CRÉNEAU</small><strong>${safe(b.slot)}</strong></div><div class="meta-item"><small>JOUEURS</small><strong>${Number(b.players)||0} joueur(s)</strong></div><div class="meta-item"><small>RÉFÉRENCE</small><strong>JO-${safe(String(b.id).slice(-6))}</strong></div></div><div class="booking-foot"><div><div style="color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.8px">TOTAL</div><div class="amount">${money(b.total)}</div></div><div class="actions"><button class="btn" data-details="${safe(b.id)}" type="button">Détails</button><button class="btn danger" data-cancel="${safe(b.id)}" type="button">Annuler</button></div></div></article>`;
+  return `<article class="booking"><div class="booking-top"><div><h3>${safe(b.name)}</h3><div style="color:var(--muted);font-size:12px;margin-top:3px">${safe(b.phone)}</div></div><span class="badge">● CONFIRMÉE</span></div><div class="booking-meta"><div class="meta-item"><small>DATE(S)</small><strong>${dateText}</strong></div><div class="meta-item"><small>CRÉNEAU</small><strong>${safe(b.slot)}</strong></div><div class="meta-item"><small>JOUEURS</small><strong>${Number(b.players)||0} joueur(s)</strong></div><div class="meta-item"><small>RÉFÉRENCE</small><strong>JO-${safe(String(b.id).slice(-6))}</strong></div><div class="meta-item"><small>PAIEMENT</small><strong>${b.paymentMethod==="baridimob"?(b.paymentStatus==="verified"?"Vérifié":b.paymentStatus==="rejected"?"Refusé":"À vérifier"):"Sur place"}</strong></div></div><div class="booking-foot"><div><div style="color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.8px">TOTAL</div><div class="amount">${money(b.total)}</div></div><div class="actions"><button class="btn" data-details="${safe(b.id)}" type="button">Détails</button><button class="btn danger" data-cancel="${safe(b.id)}" type="button">Annuler</button></div></div></article>`;
  }).join("");
  document.querySelectorAll("[data-details]").forEach(btn=>btn.onclick=()=>showDetails(btn.dataset.details));
  document.querySelectorAll("[data-cancel]").forEach(btn=>btn.onclick=()=>cancelBooking(btn.dataset.cancel));
@@ -111,9 +111,17 @@ function renderBookings(){
 function showDetails(id){
  const b=bookings.find(x=>String(x.id)===String(id));if(!b)return;selectedBooking=b;
  const ds=datesOf(b);
- const values=[["Client",b.name],["Téléphone",b.phone],["Référence","JO-"+String(b.id).slice(-6)],["Type",b.type==="monthly"?"Réservation mensuelle":"Séance simple"],["Date(s)",ds.map(dateLabel).join(", ")],["Créneau",b.slot],["Joueurs",`${b.players} joueur(s)`],["Montant",money(b.total)],["Créée le",b.createdAt?new Date(b.createdAt).toLocaleString("fr-FR"):"—"]];
+ const payMethod=b.paymentMethod==="baridimob"?"BaridiMob":"Paiement sur place";
+ const payStatus={pending:"À vérifier",verified:"Vérifié / payé",on_site:"À régler sur place",rejected:"Refusé"}[b.paymentStatus]||"À vérifier";
+ const values=[["Client",b.name],["Téléphone",b.phone],["Référence","JO-"+String(b.id).slice(-6)],["Type",b.type==="monthly"?"Réservation mensuelle":"Séance simple"],["Date(s)",ds.map(dateLabel).join(", ")],["Créneau",b.slot],["Joueurs",`${b.players} joueur(s)`],["Montant",money(b.total)],["Mode de paiement",payMethod],["Statut du paiement",payStatus],["Réf. transaction",b.transactionReference||"—"],["Créée le",b.createdAt?new Date(b.createdAt).toLocaleString("fr-FR"):"—"]];
  $("detailTitle").textContent="Réservation JO-"+String(b.id).slice(-6);
  $("detailGrid").innerHTML=values.map(([label,value])=>`<div><small>${safe(label)}</small><strong>${safe(value)}</strong></div>`).join("");
+ $("paymentStatusSelect").value=b.paymentStatus||(b.paymentMethod==="baridimob"?"pending":"on_site");
+ const preview=$("receiptPreview");preview.innerHTML="";
+ if(typeof b.receiptData==="string"&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(b.receiptData)){
+   const label=document.createElement("p");label.textContent="Justificatif reçu :";preview.appendChild(label);
+   const img=document.createElement("img");img.src=b.receiptData;img.alt="Justificatif BaridiMob";img.style.cssText="max-width:100%;max-height:320px;border-radius:10px;border:1px solid var(--line)";preview.appendChild(img);
+ } else {preview.textContent=b.paymentMethod==="baridimob"?"Aucun justificatif image enregistré.":"Paiement prévu sur place, aucun justificatif attendu.";}
  $("detailModal").classList.remove("hidden");
 }
 async function cancelBooking(id){
@@ -126,6 +134,16 @@ async function cancelBooking(id){
   renderStats();renderBookings();notice("Réservation annulée avec succès. Le ticket en ligne est désormais invalide et le créneau est disponible.");
  }catch(e){notice(e.message||"L’annulation a échoué. Vérifie la connexion puis actualise.");}
 }
+$("savePaymentStatus").onclick=async()=>{
+ if(!selectedBooking)return;const button=$("savePaymentStatus");button.disabled=true;
+ try{
+  const data=await api("/api/admin/bookings/"+encodeURIComponent(selectedBooking.id)+"/payment",{method:"PATCH",body:JSON.stringify({paymentStatus:$("paymentStatusSelect").value})});
+  Object.assign(selectedBooking,{paymentMethod:data.booking.paymentMethod,paymentStatus:data.booking.paymentStatus,paymentUpdatedAt:data.booking.paymentUpdatedAt});
+  const idx=bookings.findIndex(x=>String(x.id)===String(selectedBooking.id));if(idx>=0)Object.assign(bookings[idx],selectedBooking);
+  renderBookings();showDetails(selectedBooking.id);notice("Statut du paiement mis à jour. La réservation et son créneau n’ont pas été modifiés.");
+ }catch(e){notice(e.message||"Impossible de mettre à jour le paiement.")}
+ finally{button.disabled=false}
+};
 $("detailCancel").onclick=()=>selectedBooking&&cancelBooking(selectedBooking.id);
 $("closeDetail").onclick=()=>$("detailModal").classList.add("hidden");
 $("detailModal").addEventListener("click",e=>{if(e.target.id==="detailModal")$("detailModal").classList.add("hidden")});

@@ -1,37 +1,35 @@
-# JO STADIUM — Projet complet
+# JO STADIUM — Projet complet V6
 
-Projet Node.js / Express avec PostgreSQL pour les réservations du terrain et les tournois.
+Application Node.js / Express + PostgreSQL pour les réservations du terrain, l’administration et les tournois.
 
 ## Fichiers
-- `server.js` : API, initialisation/migrations PostgreSQL, réservations, tournois, matchs et résultats.
-- `public/index.html` : site client. Le menu hamburger contient désormais « Gestion d’administration » et mène à `/admin` (connexion toujours requise).
-- `public/admin.html` : réservations, paiements et recettes.
-- `public/admin-tournaments.html` : administration des tournois, équipes, calendrier et saisie des résultats.
-- `public/tournaments.html` : inscriptions publiques, résultats et classements.
-- `public/baridimob-logo.png` : logo fourni pour le paiement BaridiMob.
+- `server.js` : API, migrations PostgreSQL, réservations, tirage au sort, génération du calendrier, résultats et phase éliminatoire.
+- `public/index.html` : site client et paiement BaridiMob.
+- `public/admin.html` : administration des réservations, paiements et recettes.
+- `public/admin-tournaments.html` : gestion des équipes, tirage au sort, calendrier, résultats et cartons.
+- `public/tournaments.html` : page publique avec calendrier, scores, classements et qualifications.
+- `public/baridimob-logo.png` : logo BaridiMob fourni.
 
-## Configuration Render
+## Déploiement Render
 - Build command : `npm install`
 - Start command : `npm start`
 - Variables requises : `DATABASE_URL` et `ADMIN_PASSWORD`
-- PostgreSQL doit rester attaché au service : ne supprime pas la base pour déployer cette version.
+- Conserver la base PostgreSQL actuelle. Les migrations ajoutent les colonnes nécessaires sans supprimer les réservations.
 
-## Résultats manuels
-Dans `/admin/tournois`, ouvre le tournoi et utilise « Saisie manuelle d’un résultat ». Choisis les deux équipes, saisis la date/heure si connues, le score et les cartons, puis appuie sur « Enregistrer le résultat ». Le serveur valide et sauvegarde le match en transaction PostgreSQL. Le classement public est recalculé à partir des résultats enregistrés.
+## Nouveau fonctionnement des tournois
+1. Créer le tournoi, définir le nombre maximum d’équipes (4 à 48), les groupes et éventuellement 2 à 8 meilleurs troisièmes.
+2. Laisser les équipes s’inscrire. Quand la liste est prête, ouvrir `/admin/tournois` et utiliser **« Générer le tirage + calendrier »**.
+3. Le tirage répartit les équipes aléatoirement dans les groupes. Le calendrier de poule est créé automatiquement selon le format aller simple (chaque équipe rencontre une fois les autres équipes de son groupe).
+4. La date du premier match, l’heure de départ et le nombre de matchs par jour sont configurables. Les créneaux sont espacés de 90 minutes. Chaque rencontre reste modifiable dans l’administration.
+5. L’administrateur saisit les scores et cartons dans chaque match, puis clique sur **« Enregistrer le résultat »**. Le classement est recalculé depuis les résultats stockés dans PostgreSQL.
+6. Quand tous les matchs de poule prévus sont terminés, le serveur crée automatiquement le tableau éliminatoire jusqu’à la finale. Les deux premiers de chaque groupe sont qualifiés ; si l’option est activée, les meilleurs troisièmes sélectionnés complètent le tableau. Les exemptions (BYE) sont propagées automatiquement.
+7. Pour un match éliminatoire nul, saisir aussi les tirs au but avec un score différent afin de déterminer le vainqueur. Le vainqueur passe automatiquement au match suivant.
 
-La programmation préalable reste également disponible pour les matchs à venir. Les résultats déjà programmés peuvent être modifiés depuis leur fiche.
+## Couleurs du classement public
+- Vert à droite de la ligne : les deux premières équipes de chaque groupe.
+- Bleu à droite : meilleur troisième qualifié ou troisième candidat si l’option est activée.
 
-## Notes de sécurité et déploiement
-- La page `/admin` et `/admin/tournois` demandent le mot de passe défini dans `ADMIN_PASSWORD`.
-- Les migrations ajoutent/ajustent les colonnes des tournois et matchs sans supprimer les réservations.
-- Fais une sauvegarde de la base PostgreSQL avant le déploiement. Vérifie les logs Render et teste l'enregistrement avec un tournoi de test.
-
-
-## Accès administration et tournois (version corrigée)
-
-- Depuis le menu ☰ du site client, « Gestion d’administration » ouvre `/admin` dans un nouvel onglet.
-- Après connexion, un grand raccourci vert « Gestion des tournois » apparaît dans le tableau de bord. Il ouvre `/admin/tournois` dans un nouvel onglet.
-- Les deux pages partagent le même jeton d'administration dans `localStorage` sur le même domaine.
-- Le serveur désactive le cache des pages HTML pour éviter d'afficher l'ancien menu après un déploiement.
-
-Après mise à jour, faire un rechargement forcé du navigateur mobile si une ancienne page reste affichée. Conserver la base PostgreSQL et les variables `DATABASE_URL` et `ADMIN_PASSWORD`.
+## Important
+- Génère le tirage seulement lorsque toutes les équipes sont inscrites : la génération ferme les inscriptions pour préserver le calendrier.
+- Le tirage peut être recréé uniquement tant qu’aucun résultat n’a été saisi. Les résultats existants ne sont pas supprimés par une génération accidentelle.
+- Fais une sauvegarde de PostgreSQL avant le déploiement. Les tests de syntaxe des fichiers ne remplacent pas un test sur la base Render réelle.

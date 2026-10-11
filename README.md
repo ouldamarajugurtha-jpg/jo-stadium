@@ -1,34 +1,37 @@
-# JO STADIUM — backend et tournois
+# JO STADIUM — Projet complet
 
-## Contenu
-- `server.js` : serveur Express, API des réservations et API des tournois.
-- `public/index.html` : site client de réservation avec le logo BaridiMob fourni.
-- `public/admin.html` : administration des réservations et paiements.
-- `public/admin-tournaments.html` : administration des tournois, équipes, calendrier, scores et cartons.
-- `public/tournaments.html` : inscriptions publiques, calendrier, résultats et classements.
-- `public/baridimob-logo.png` : logo BaridiMob utilisé dans la page de réservation.
+Projet Node.js / Express avec PostgreSQL pour les réservations du terrain et les tournois.
 
-## Variables d’environnement nécessaires
-- `DATABASE_URL` : URL de connexion PostgreSQL.
-- `ADMIN_PASSWORD` : mot de passe administrateur.
-- `PORT` : facultatif, Render fournit normalement cette valeur.
+## Fichiers
+- `server.js` : API, initialisation/migrations PostgreSQL, réservations, tournois, matchs et résultats.
+- `public/index.html` : site client. Le menu hamburger contient désormais « Gestion d’administration » et mène à `/admin` (connexion toujours requise).
+- `public/admin.html` : réservations, paiements et recettes.
+- `public/admin-tournaments.html` : administration des tournois, équipes, calendrier et saisie des résultats.
+- `public/tournaments.html` : inscriptions publiques, résultats et classements.
+- `public/baridimob-logo.png` : logo fourni pour le paiement BaridiMob.
 
-Le serveur ne démarre pas si `DATABASE_URL` ou `ADMIN_PASSWORD` sont absents.
+## Configuration Render
+- Build command : `npm install`
+- Start command : `npm start`
+- Variables requises : `DATABASE_URL` et `ADMIN_PASSWORD`
+- PostgreSQL doit rester attaché au service : ne supprime pas la base pour déployer cette version.
 
-## Déploiement Render
-- **Root Directory** : `JO_STADIUM_backend` si tu téléverses le dossier parent, ou laisser vide si tu places directement les fichiers du dossier dans la racine du dépôt.
-- **Build Command** : `npm install`
-- **Start Command** : `npm start`
-- Ajouter `DATABASE_URL` et `ADMIN_PASSWORD` dans les variables d’environnement Render. Conserver la même base PostgreSQL que celle qui contient les réservations existantes.
+## Résultats manuels
+Dans `/admin/tournois`, ouvre le tournoi et utilise « Saisie manuelle d’un résultat ». Choisis les deux équipes, saisis la date/heure si connues, le score et les cartons, puis appuie sur « Enregistrer le résultat ». Le serveur valide et sauvegarde le match en transaction PostgreSQL. Le classement public est recalculé à partir des résultats enregistrés.
 
-## Tournois inclus
-- Maximum de 48 équipes par tournoi.
-- De 2 à 24 groupes, sans dépasser le nombre d’équipes.
-- Option de qualification des meilleurs troisièmes désactivée ou réglée de 2 à 8 équipes.
-- Création des matchs avec choix de date et d’heure.
-- Enregistrement manuel des scores et des cartons jaunes/rouges.
-- Calcul automatique des points, victoires, nuls, défaites, buts, différence de buts et classements.
-- Affichage public des calendriers, résultats et classements ; vert pour les deux premiers, bleu pour les meilleurs troisièmes qualifiés.
+La programmation préalable reste également disponible pour les matchs à venir. Les résultats déjà programmés peuvent être modifiés depuis leur fiche.
 
-## Important pour les données existantes
-La migration ajoute les tables et colonnes de tournoi au démarrage. Elle ne supprime pas la table des réservations. Déploie en conservant la même base PostgreSQL et ne supprime pas la base Render.
+## Notes de sécurité et déploiement
+- La page `/admin` et `/admin/tournois` demandent le mot de passe défini dans `ADMIN_PASSWORD`.
+- Les migrations ajoutent/ajustent les colonnes des tournois et matchs sans supprimer les réservations.
+- Fais une sauvegarde de la base PostgreSQL avant le déploiement. Vérifie les logs Render et teste l'enregistrement avec un tournoi de test.
+
+
+## Accès administration et tournois (version corrigée)
+
+- Depuis le menu ☰ du site client, « Gestion d’administration » ouvre `/admin` dans un nouvel onglet.
+- Après connexion, un grand raccourci vert « Gestion des tournois » apparaît dans le tableau de bord. Il ouvre `/admin/tournois` dans un nouvel onglet.
+- Les deux pages partagent le même jeton d'administration dans `localStorage` sur le même domaine.
+- Le serveur désactive le cache des pages HTML pour éviter d'afficher l'ancien menu après un déploiement.
+
+Après mise à jour, faire un rechargement forcé du navigateur mobile si une ancienne page reste affichée. Conserver la base PostgreSQL et les variables `DATABASE_URL` et `ADMIN_PASSWORD`.

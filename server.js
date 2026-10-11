@@ -36,7 +36,7 @@ const PRICE_PER_PLAYER = 100;
 const STADIUM_TIMEZONE = "Africa/Algiers";
 const appHtml = path.join(__dirname, "public");
 
-app.use(express.json({ limit: "100kb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static(appHtml));
 
 /*
@@ -203,9 +203,20 @@ async function initDatabase() {
       phone TEXT NOT NULL,
       total INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'confirmed',
+      payment_method TEXT NOT NULL DEFAULT 'on_site',
+      payment_status TEXT NOT NULL DEFAULT 'on_site',
+      transaction_reference TEXT,
+      receipt_data TEXT,
+      payment_updated_at TIMESTAMPTZ,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  // Migrations sûres : les réservations existantes sont conservées.
+  await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'on_site'`);
+  await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'on_site'`);
+  await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS transaction_reference TEXT`);
+  await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS receipt_data TEXT`);
+  await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_updated_at TIMESTAMPTZ`);
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS bookings_slot_idx
@@ -354,17 +365,20 @@ app.get("/api/bookings/status", async (req, res) => {
 app.get("/api/bookings/:id/status", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id
+      `SELECT id, payment_method AS "paymentMethod", payment_status AS "paymentStatus",
+              transaction_reference AS "transactionReference"
        FROM bookings
-       WHERE id = $1
-         AND status = 'confirmed'`,
+       WHERE id = $1 AND status = 'confirmed'`,
       [String(req.params.id)]
     );
 
     res.set("Cache-Control", "no-store");
-
+    const booking = result.rows[0];
     res.json({
-      active: result.rowCount > 0
+      active: result.rowCount > 0,
+      paymentMethod: booking?.paymentMethod || null,
+      paymentStatus: booking?.paymentStatus || null,
+      transactionReference: booking?.transactionReference || null
     });
   } catch (error) {
     dbError(
@@ -393,6 +407,18 @@ app.post("/api/bookings", async (req, res) => {
 
   const dates = normalizeDates(body.dates);
   const players = Number(body.players);
+  const paymentMethod = body.paymentMethod === "baridimob" ? "baridimob" : body.paymentMethod === "on_site" ? "on_site" : null;
+  const transactionReference = typeof body.transactionReference === "string" ? body.transactionReference.trim().slice(0, 100) : "";
+  const receiptData = typeof body.receiptData === "string" ? body.receiptData : "";
+  const receiptMatch = receiptData.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  const receiptBytes = receiptMatch ? Math.floor(receiptMatch[2].length * 3 / 4) : 0;
+  if (!paymentMethod) return res.status(400).json({ error: "Choisis BaridiMob ou le paiement sur place." });
+  if (paymentMethod === "baridimob" && (!transactionReference || !receiptMatch || receiptBytes > 2 * 1024 * 1024)) {
+    return res.status(400).json({ error: "Pour BaridiMob, indique la référence de transaction et joins un justificatif image (2 Mo maximum)." });
+  }
+  if (paymentMethod === "on_site" && (transactionReference || receiptData)) {
+    return res.status(400).json({ error: "Aucun justificatif n'est nécessaire pour un paiement sur place." });
+  }
 
   // Blocage serveur des créneaux fermés.
   const closedDates = dates.filter(
@@ -484,32 +510,27 @@ app.post("/api/bookings", async (req, res) => {
       phone: body.phone.trim(),
       total: players * PRICE_PER_PLAYER * dates.length,
       status: "confirmed",
+      paymentMethod,
+      paymentStatus: paymentMethod === "baridimob" ? "pending" : "on_site",
+      transactionReference: paymentMethod === "baridimob" ? transactionReference : null,
+      receiptData: paymentMethod === "baridimob" ? receiptData : null,
+      paymentUpdatedAt: null,
       createdAt: new Date().toISOString()
     };
 
     await client.query(`
       INSERT INTO bookings (
-        id, type, dates, month, weekday, slot,
-        players, name, phone, total, status, "createdAt"
+        id, type, dates, month, weekday, slot, players, name, phone, total,
+        status, payment_method, payment_status, transaction_reference,
+        receipt_data, payment_updated_at, "createdAt"
+      ) VALUES (
+        $1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17
       )
-      VALUES (
-        $1, $2, $3::jsonb, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12
-      )
-    `, [
-      booking.id,
-      booking.type,
-      JSON.stringify(booking.dates),
-      booking.month,
-      booking.weekday,
-      booking.slot,
-      booking.players,
-      booking.name,
-      booking.phone,
-      booking.total,
-      booking.status,
-      booking.createdAt
-    ]);
+    `, [booking.id, booking.type, JSON.stringify(booking.dates), booking.month,
+      booking.weekday, booking.slot, booking.players, booking.name, booking.phone,
+      booking.total, booking.status, booking.paymentMethod, booking.paymentStatus,
+      booking.transactionReference, booking.receiptData, booking.paymentUpdatedAt, booking.createdAt]);
 
     await client.query("COMMIT");
 
@@ -554,8 +575,10 @@ app.get(
   async (_req, res) => {
     try {
       const result = await pool.query(`
-        SELECT id, type, dates, month, weekday, slot,
-               players, name, phone, total, status, "createdAt"
+        SELECT id, type, dates, month, weekday, slot, players, name, phone, total, status,
+               payment_method AS "paymentMethod", payment_status AS "paymentStatus",
+               transaction_reference AS "transactionReference", receipt_data AS "receiptData",
+               payment_updated_at AS "paymentUpdatedAt", "createdAt"
         FROM bookings
         ORDER BY "createdAt" DESC
       `);
@@ -572,6 +595,23 @@ app.get(
     }
   }
 );
+
+/* Mise à jour du statut de paiement, sans modifier le statut du créneau. */
+app.patch("/api/admin/bookings/:id/payment", adminAuth, async (req, res) => {
+  const allowed = new Set(["pending", "verified", "on_site", "rejected"]);
+  const paymentStatus = String(req.body?.paymentStatus || "");
+  if (!allowed.has(paymentStatus)) return res.status(400).json({ error: "Statut de paiement invalide." });
+  try {
+    const result = await pool.query(`
+      UPDATE bookings SET payment_status = $2, payment_updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, payment_method AS "paymentMethod", payment_status AS "paymentStatus",
+                transaction_reference AS "transactionReference", payment_updated_at AS "paymentUpdatedAt"
+    `, [String(req.params.id), paymentStatus]);
+    if (!result.rowCount) return res.status(404).json({ error: "Réservation introuvable." });
+    res.json({ ok: true, booking: result.rows[0] });
+  } catch (error) { dbError(res, error, "Impossible de mettre à jour le paiement."); }
+});
 
 /*
  * Annulation d'une réservation.

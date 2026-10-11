@@ -794,13 +794,22 @@ app.post(
 /* ======================= TOURNOIS ======================= */
 function groupLabel(index) { return `Groupe ${String.fromCharCode(65 + index)}`; }
 function tournamentGroups(teams, groupCount) {
-  const groups = Array.from({ length: Number(groupCount) }, (_, i) => ({ name: groupLabel(i), teams: [] }));
+  const count = Math.max(1, Number(groupCount) || 1);
+  const groups = Array.from({ length: count }, (_, i) => ({ name: groupLabel(i), teams: [] }));
   const byName = new Map(groups.map(g => [g.name, g]));
-  const assigned = teams.some(t => String(t.groupName || '').trim());
-  teams.forEach((team, index) => {
-    const saved = assigned ? byName.get(String(team.groupName || '')) : null;
-    (saved || groups[index % groups.length]).teams.push(team);
-  });
+  const pending = [];
+  // Keep persisted group assignments stable; only distribute teams with no valid group.
+  for (const team of teams) {
+    const saved = byName.get(String(team.groupName || '').trim());
+    if (saved) saved.teams.push(team);
+    else pending.push(team);
+  }
+  for (const team of pending) {
+    const smallest = Math.min(...groups.map(g => g.teams.length));
+    const target = groups.find(g => g.teams.length === smallest);
+    team.groupName = target.name;
+    target.teams.push(team);
+  }
   return groups;
 }
 function compareStanding(a, b) {
@@ -869,7 +878,12 @@ async function getTournamentDetails(tournament, admin = false, executor = pool) 
     ORDER BY CASE WHEN m.phase='group' THEN 0 ELSE 1 END,m.round_number,m.match_number,m.match_date NULLS LAST,m.match_time NULLS LAST,m.created_at`, [tournament.id]);
   const matches = matchesResult.rows.map(mapMatch);
   const standings = calculateStandings(groups, matches, tournament.bestThirdCount);
-  return { ...tournament, groups, standings, matches, teams: admin ? teams : undefined };
+  // Public clients need team names and groups, never captains' phone numbers or ticket codes.
+  const visibleGroups = groups.map(group => ({
+    ...group,
+    teams: group.teams.map(team => admin ? team : ({ id: team.id, teamName: team.teamName, groupName: team.groupName || group.name }))
+  }));
+  return { ...tournament, groups: visibleGroups, standings, matches, teams: admin ? teams : undefined };
 }
 function shuffle(items) {
   const out = [...items];
@@ -1004,12 +1018,31 @@ app.post('/api/tournaments/:id/register', async (req, res) => {
     const count = await client.query('SELECT COUNT(*)::int AS n FROM tournament_teams WHERE tournament_id=$1', [tournament.id]);
     if (count.rows[0].n >= tournament.max_teams) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Ce tournoi est complet.' }); }
     const hasDraw = await client.query(`SELECT 1 FROM tournament_matches WHERE tournament_id=$1 LIMIT 1`, [tournament.id]);
-    if (hasDraw.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Le tirage et le calendrier sont déjà générés. Pour inscrire une nouvelle équipe, demande à l’administrateur de réinitialiser le calendrier.' }); }
+    if (hasDraw.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Le calendrier est déjà généré. Les inscriptions sont verrouillées pour préserver les matchs.' }); }
     const duplicate = await client.query('SELECT 1 FROM tournament_teams WHERE tournament_id=$1 AND LOWER(team_name)=LOWER($2)', [tournament.id, teamName]);
     if (duplicate.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Cette équipe est déjà inscrite à ce tournoi.' }); }
+
+    // Complète les éventuelles anciennes inscriptions sans groupe, en gardant les groupes déjà attribués.
+    const groups = Array.from({ length: Number(tournament.group_count) }, (_, i) => ({ name: groupLabel(i), count: 0 }));
+    const groupIndex = new Map(groups.map((g, i) => [g.name, i]));
+    const existingTeams = await client.query(`SELECT id,group_name AS "groupName" FROM tournament_teams WHERE tournament_id=$1 ORDER BY created_at,id FOR UPDATE`, [tournament.id]);
+    for (const existingTeam of existingTeams.rows) {
+      const idx = groupIndex.get(String(existingTeam.groupName || '').trim());
+      if (idx !== undefined) groups[idx].count++;
+      else {
+        const min = Math.min(...groups.map(g => g.count));
+        const candidates = groups.map((g, i) => ({ g, i })).filter(x => x.g.count === min);
+        const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+        await client.query(`UPDATE tournament_teams SET group_name=$2 WHERE id=$1`, [existingTeam.id, chosen.g.name]);
+        chosen.g.count++;
+      }
+    }
+    const minCount = Math.min(...groups.map(g => g.count));
+    const eligible = groups.filter(g => g.count === minCount);
+    const assignedGroup = eligible[Math.floor(Math.random() * eligible.length)].name;
     const id = `team-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, ticketCode = `JOT-${Math.random().toString(36).slice(2,6).toUpperCase()}-${Date.now().toString().slice(-6)}`;
-    const inserted = await client.query(`INSERT INTO tournament_teams(id,tournament_id,team_name,captain_name,phone,ticket_code,payment_status) VALUES($1,$2,$3,$4,$5,$6,'on_site') RETURNING id,team_name AS "teamName",captain_name AS "captainName",phone,ticket_code AS "ticketCode",payment_status AS "paymentStatus",created_at AS "createdAt"`, [id,tournament.id,teamName,captainName,phone,ticketCode]);
-    await client.query('COMMIT'); res.status(201).json({ ok: true, tournament: { id: tournament.id, name: tournament.name }, team: inserted.rows[0], paymentMessage: 'Ticket d’inscription créé. Frais à régler sur place.' });
+    const inserted = await client.query(`INSERT INTO tournament_teams(id,tournament_id,team_name,captain_name,phone,ticket_code,payment_status,group_name) VALUES($1,$2,$3,$4,$5,$6,'on_site',$7) RETURNING id,team_name AS "teamName",captain_name AS "captainName",phone,ticket_code AS "ticketCode",payment_status AS "paymentStatus",group_name AS "groupName",created_at AS "createdAt"`, [id,tournament.id,teamName,captainName,phone,ticketCode,assignedGroup]);
+    await client.query('COMMIT'); res.set('Cache-Control','no-store').status(201).json({ ok: true, tournament: { id: tournament.id, name: tournament.name }, team: inserted.rows[0], paymentMessage: 'Ticket d’inscription créé. Groupe attribué automatiquement. Frais à régler sur place.' });
   } catch (error) { try { await client.query('ROLLBACK'); } catch (_) {} if (error.code === '23505') return res.status(409).json({ error: 'Cette équipe est déjà inscrite à ce tournoi.' }); dbError(res,error,'Impossible d’inscrire cette équipe.'); }
   finally { client.release(); }
 });
@@ -1037,7 +1070,7 @@ app.post('/api/admin/tournaments/:id/generate-schedule', adminAuth, async (req,r
     await client.query('BEGIN');
     const tr=await client.query('SELECT id,name,group_count AS "groupCount",tournament_date AS "tournamentDate" FROM tournaments WHERE id=$1 FOR UPDATE',[tournamentId]);
     if(!tr.rowCount){await client.query('ROLLBACK');return res.status(404).json({error:'Tournoi introuvable.'});}
-    const teams=(await client.query(`SELECT id,team_name AS "teamName",created_at AS "createdAt" FROM tournament_teams WHERE tournament_id=$1 ORDER BY created_at,id`,[tournamentId])).rows;
+    const teams=(await client.query(`SELECT id,team_name AS "teamName",group_name AS "groupName",created_at AS "createdAt" FROM tournament_teams WHERE tournament_id=$1 ORDER BY created_at,id`,[tournamentId])).rows;
     const groupCount=Number(tr.rows[0].groupCount);
     if(teams.length<4 || teams.length<groupCount){await client.query('ROLLBACK');return res.status(400).json({error:`Il faut au moins ${Math.max(4,groupCount)} équipes inscrites avant de générer le tirage.`});}
     const old=await client.query(`SELECT status FROM tournament_matches WHERE tournament_id=$1`,[tournamentId]);
@@ -1045,7 +1078,11 @@ app.post('/api/admin/tournaments/:id/generate-schedule', adminAuth, async (req,r
     await client.query(`DELETE FROM tournament_matches WHERE tournament_id=$1`,[tournamentId]);
     await client.query(`UPDATE tournament_teams SET group_name='' WHERE tournament_id=$1`,[tournamentId]);
     const groups=Array.from({length:groupCount},(_,i)=>({name:groupLabel(i),teams:[]}));
-    shuffle(teams).forEach((team,index)=>groups[index%groupCount].teams.push(team));
+    const groupByName=new Map(groups.map(g=>[g.name,g]));
+    const unassigned=[];
+    for(const team of teams){const target=groupByName.get(String(team.groupName||'').trim());if(target)target.teams.push(team);else unassigned.push(team);}
+    // Legacy registrations without a group are randomly placed in the smallest group.
+    shuffle(unassigned).forEach(team=>{const min=Math.min(...groups.map(g=>g.teams.length));const candidates=groups.filter(g=>g.teams.length===min);const target=candidates[Math.floor(Math.random()*candidates.length)];target.teams.push(team);team.groupName=target.name;});
     for(const group of groups) for(const team of group.teams) await client.query(`UPDATE tournament_teams SET group_name=$2 WHERE id=$1`,[team.id,group.name]);
     const groupRounds=groups.map(g=>({group:g,rounds:makeRoundRobin(g.teams)}));
     const maxRounds=Math.max(...groupRounds.map(x=>x.rounds.length));

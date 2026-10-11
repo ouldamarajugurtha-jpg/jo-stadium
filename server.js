@@ -849,12 +849,15 @@ app.delete("/api/admin/tournaments/:id/matches/:matchId",adminAuth,async(req,res
  * Interface d'administration.
  */
 app.get(["/admin", "/admin/"], (_req, res) => {
+  res.set("Cache-Control", "no-store");
   res.sendFile(path.join(appHtml, "admin.html"));
 });
 app.get(["/tournois", "/tournois/"], (_req, res) => {
+  res.set("Cache-Control", "no-store");
   res.sendFile(path.join(appHtml, "tournaments.html"));
 });
 app.get(["/admin/tournois", "/admin/tournois/"], (_req, res) => {
+  res.set("Cache-Control", "no-store");
   res.sendFile(path.join(appHtml, "admin-tournaments.html"));
 });
 
@@ -862,6 +865,7 @@ app.get(["/admin/tournois", "/admin/tournois/"], (_req, res) => {
  * Autres pages du site.
  */
 app.get("*", (_req, res) => {
+  res.set("Cache-Control", "no-store");
   res.sendFile(path.join(appHtml, "index.html"));
 });
 

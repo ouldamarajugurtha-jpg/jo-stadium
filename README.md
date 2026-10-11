@@ -1,32 +1,34 @@
-# JO STADIUM — version tournoi améliorée
+# JO STADIUM — backend et tournois
 
 ## Contenu
-- `server.js` : serveur Express et API PostgreSQL.
-- `index.html` : site public de réservation, avec le logo BaridiMob fourni dans `public/baridimob-logo.png`.
-- `admin.html` : administration des réservations.
-- `public/tournaments.html` : inscription client, calendrier, résultats et classements publics.
-- `public/admin-tournaments.html` : administration du tournoi, création du calendrier, saisie des scores et cartons.
-- `public/baridimob-logo.png` : image fournie pour remplacer l'icône bleue créée précédemment.
+- `server.js` : serveur Express, API des réservations et API des tournois.
+- `public/index.html` : site client de réservation avec le logo BaridiMob fourni.
+- `public/admin.html` : administration des réservations et paiements.
+- `public/admin-tournaments.html` : administration des tournois, équipes, calendrier, scores et cartons.
+- `public/tournaments.html` : inscriptions publiques, calendrier, résultats et classements.
+- `public/baridimob-logo.png` : logo BaridiMob utilisé dans la page de réservation.
+
+## Variables d’environnement nécessaires
+- `DATABASE_URL` : URL de connexion PostgreSQL.
+- `ADMIN_PASSWORD` : mot de passe administrateur.
+- `PORT` : facultatif, Render fournit normalement cette valeur.
+
+Le serveur ne démarre pas si `DATABASE_URL` ou `ADMIN_PASSWORD` sont absents.
 
 ## Déploiement Render
-1. Décompresser l'archive et pousser son contenu dans le dépôt GitHub du service Render.
-2. La racine du dépôt doit contenir `server.js`, `package.json`, `index.html`, `admin.html` et le dossier `public/`.
-3. Commande de démarrage : `npm start`.
-4. Configurer `DATABASE_URL` avec la même base PostgreSQL que celle qui contient les réservations existantes.
-5. Configurer `ADMIN_PASSWORD` dans les variables d'environnement Render. Ne pas mettre le vrai mot de passe dans GitHub.
-6. Déployer et vérifier `/api/health`, puis les réservations avant de tester les tournois.
+- **Root Directory** : `JO_STADIUM_backend` si tu téléverses le dossier parent, ou laisser vide si tu places directement les fichiers du dossier dans la racine du dépôt.
+- **Build Command** : `npm install`
+- **Start Command** : `npm start`
+- Ajouter `DATABASE_URL` et `ADMIN_PASSWORD` dans les variables d’environnement Render. Conserver la même base PostgreSQL que celle qui contient les réservations existantes.
 
-## Fonctionnalités tournoi
-- Jusqu'à 48 équipes et 12 groupes.
-- Qualification optionnelle de 2 à 8 meilleurs troisièmes, ou désactivée.
-- Génération du calendrier round-robin, déclenchée lorsque la capacité maximale est atteinte ou manuellement depuis l'administration.
-- Modification de la date/heure de chaque match.
-- Saisie des scores, jaunes et rouges, avec sauvegarde PostgreSQL.
-- Calcul automatique des points (3 victoire, 1 nul), différence de buts, buts marqués et classements.
-- Les deux premières places de chaque groupe sont indiquées en vert ; les meilleurs troisièmes qualifiés en bleu.
-- Les clients peuvent consulter les tournois, les résultats et les classements, même lorsque les inscriptions sont fermées.
+## Tournois inclus
+- Maximum de 48 équipes par tournoi.
+- De 2 à 24 groupes, sans dépasser le nombre d’équipes.
+- Option de qualification des meilleurs troisièmes désactivée ou réglée de 2 à 8 équipes.
+- Création des matchs avec choix de date et d’heure.
+- Enregistrement manuel des scores et des cartons jaunes/rouges.
+- Calcul automatique des points, victoires, nuls, défaites, buts, différence de buts et classements.
+- Affichage public des calendriers, résultats et classements ; vert pour les deux premiers, bleu pour les meilleurs troisièmes qualifiés.
 
-## Important — sauvegarde
-Le serveur ajoute les tables et colonnes nécessaires via des migrations idempotentes sans supprimer les réservations existantes. Il faut impérativement conserver la même base PostgreSQL. Faire une sauvegarde de la base avant le déploiement est recommandé.
-
-Le code a été contrôlé pour la syntaxe JavaScript et la structure des fichiers. La connexion à la base Render et les requêtes SQL doivent encore être vérifiées sur l'instance de production, car cette archive ne contient pas les identifiants de ta base.
+## Important pour les données existantes
+La migration ajoute les tables et colonnes de tournoi au démarrage. Elle ne supprime pas la table des réservations. Déploie en conservant la même base PostgreSQL et ne supprime pas la base Render.

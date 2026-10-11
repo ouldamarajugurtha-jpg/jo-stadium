@@ -11,7 +11,7 @@
 </style>
 </head>
 <body>
-<header class="topbar"><div class="shell topinner"><a class="brand" href="/">JO <span>STADIUM</span> <small style="font-size:10px;color:#9ca8b8;letter-spacing:1px">ADMIN</small></a><div class="top-actions"><a class="btn" href="/">← Retour au site</a><button class="btn hidden" id="refreshBtn">↻ Actualiser</button><button class="btn hidden" id="logoutBtn">Déconnexion</button></div></div></header>
+<header class="topbar"><div class="shell topinner"><a class="brand" href="/">JO <span>STADIUM</span> <small style="font-size:10px;color:#9ca8b8;letter-spacing:1px">ADMIN</small></a><div class="top-actions"><a class="btn" href="/">← Retour au site</a><a class="btn hidden" id="tournamentsBtn" href="/admin/tournois">🏆 Gestion des tournois</a><button class="btn hidden" id="refreshBtn">↻ Actualiser</button><button class="btn hidden" id="logoutBtn">Déconnexion</button></div></div></header>
 <main class="shell">
 <section class="intro"><p class="eyebrow">ESPACE PRIVÉ</p><h1>Gestion d’administration</h1><p>Réservations, créneaux et recettes — tout au même endroit.</p></section>
 <div id="notice" class="notice" role="status"></div>
@@ -54,7 +54,7 @@ function datesOf(b){return Array.isArray(b.dates)?b.dates:[]}
 function api(url,options={}){return fetch(url,{...options,headers:{"Content-Type":"application/json",...(token()?{"x-admin-token":token()}:{}),...(options.headers||{})},cache:"no-store"}).then(async r=>{const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||`Erreur serveur (${r.status})`);e.status=r.status;throw e}return data})}
 function notice(msg){$("notice").textContent=msg;$("notice").classList.add("show")}
 function clearNotice(){$("notice").textContent="";$("notice").classList.remove("show")}
-function setLoggedIn(yes){$("loginPanel").classList.toggle("hidden",yes);$("dashboard").classList.toggle("hidden",!yes);$("refreshBtn").classList.toggle("hidden",!yes);$("logoutBtn").classList.toggle("hidden",!yes)}
+function setLoggedIn(yes){$("loginPanel").classList.toggle("hidden",yes);$("dashboard").classList.toggle("hidden",!yes);$("refreshBtn").classList.toggle("hidden",!yes);$("logoutBtn").classList.toggle("hidden",!yes);const tb=$("tournamentsBtn");if(tb)tb.classList.toggle("hidden",!yes)}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();clearNotice();$("loginBtn").disabled=true;try{const r=await api("/api/admin/login",{method:"POST",body:JSON.stringify({password:$("password").value})});if(!r.token)throw new Error("Le serveur n’a pas confirmé la connexion.");localStorage.setItem("joStadiumAdminToken",r.token);$("password").value="";setLoggedIn(true);await loadBookings()}catch(err){notice(err.message||"Connexion impossible.")}finally{$("loginBtn").disabled=false}});
 async function loadBookings(){
  if(loading)return;loading=true;$("refreshBtn").disabled=true;

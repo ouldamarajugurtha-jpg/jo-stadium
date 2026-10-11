@@ -293,6 +293,36 @@ async function initDatabase() {
       CHECK (home_yellow >= 0 AND home_red >= 0 AND away_yellow >= 0 AND away_red >= 0)
     )
   `);
+  // Migrations compatibilité : certaines installations précédentes possèdent déjà
+  // les tables de tournoi avec un schéma plus ancien. Ajouter les colonnes manquantes
+  // évite que /api/tournaments échoue au premier SELECT après un redéploiement.
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS tournament_date DATE`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS max_teams INTEGER NOT NULL DEFAULT 16`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS group_count INTEGER NOT NULL DEFAULT 4`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS best_third_count INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'open'`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+
+  await pool.query(`ALTER TABLE tournament_teams ADD COLUMN IF NOT EXISTS captain_name TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE tournament_teams ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE tournament_teams ADD COLUMN IF NOT EXISTS ticket_code TEXT`);
+  await pool.query(`ALTER TABLE tournament_teams ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'on_site'`);
+  await pool.query(`ALTER TABLE tournament_teams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS home_team_id TEXT`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS away_team_id TEXT`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS match_date DATE`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS match_time TIME`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS home_goals INTEGER`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS away_goals INTEGER`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS home_yellow INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS home_red INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS away_yellow INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS away_red INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'scheduled'`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
   await pool.query(`CREATE INDEX IF NOT EXISTS tournament_matches_tournament_idx ON tournament_matches (tournament_id, match_date, match_time)`);
 
   console.log("Base PostgreSQL initialisée.");

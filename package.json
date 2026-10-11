@@ -1,18 +1,14 @@
 {
   "name": "jo-stadium",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "JO STADIUM - réservations et gestion des tournois",
+  "description": "JO STADIUM — réservations et gestion de tournois avec résultats persistants",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "check": "node --check server.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.21.2",
-    "pg": "^8.13.1"
+    "pg": "^8.16.3"
   }
 }

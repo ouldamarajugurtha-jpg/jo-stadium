@@ -1,6 +1,6 @@
 {
   "name": "jo-stadium",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "JO STADIUM — réservation terrain 6x6, paiements et gestion complète des tournois",
   "main": "server.js",

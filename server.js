@@ -323,6 +323,15 @@ async function initDatabase() {
   await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS away_red INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'scheduled'`);
   await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  // Harmoniser les anciennes contraintes de statut : certains anciens schémas
+  // n'acceptaient pas la valeur "finished", ce qui faisait échouer la sauvegarde.
+  await pool.query(`DO $$ DECLARE c RECORD; BEGIN
+    FOR c IN SELECT conname FROM pg_constraint
+      WHERE conrelid = 'tournament_matches'::regclass AND contype = 'c'
+        AND pg_get_constraintdef(oid) ILIKE '%status%'
+    LOOP EXECUTE format('ALTER TABLE tournament_matches DROP CONSTRAINT %I', c.conname); END LOOP;
+  END $$`);
+  await pool.query(`ALTER TABLE tournament_matches ADD CONSTRAINT tournament_matches_status_valid_check CHECK (status IN ('scheduled','finished'))`);
   await pool.query(`CREATE INDEX IF NOT EXISTS tournament_matches_tournament_idx ON tournament_matches (tournament_id, match_date, match_time)`);
 
   console.log("Base PostgreSQL initialisée.");
@@ -840,7 +849,49 @@ app.post("/api/admin/tournaments/:id/matches",adminAuth,async(req,res)=>{
 });
 app.patch("/api/admin/tournaments/:id/matches/:matchId/result",adminAuth,async(req,res)=>{
   const vals=['homeGoals','awayGoals','homeYellow','homeRed','awayYellow','awayRed'];const n={};for(const k of vals){n[k]=Number(req.body?.[k]??0);if(!Number.isInteger(n[k])||n[k]<0||n[k]>99)return res.status(400).json({error:'Les scores et cartons doivent être des nombres entiers positifs.'});}
-  try{const r=await pool.query(`UPDATE tournament_matches SET home_goals=$3,away_goals=$4,home_yellow=$5,home_red=$6,away_yellow=$7,away_red=$8,status='finished' WHERE tournament_id=$1 AND id=$2 RETURNING id`,[String(req.params.id),String(req.params.matchId),n.homeGoals,n.awayGoals,n.homeYellow,n.homeRed,n.awayYellow,n.awayRed]);if(!r.rowCount)return res.status(404).json({error:'Match introuvable.'});res.json({ok:true,message:'Résultat enregistré.'});}catch(error){dbError(res,error,'Impossible d’enregistrer le résultat.');}
+  try{
+    const r=await pool.query(`UPDATE tournament_matches SET home_goals=$3,away_goals=$4,home_yellow=$5,home_red=$6,away_yellow=$7,away_red=$8,status='finished' WHERE tournament_id=$1 AND id=$2 RETURNING id,home_goals AS "homeGoals",away_goals AS "awayGoals",status`,[String(req.params.id),String(req.params.matchId),n.homeGoals,n.awayGoals,n.homeYellow,n.homeRed,n.awayYellow,n.awayRed]);
+    if(!r.rowCount)return res.status(404).json({error:'Match introuvable. Actualise la page et réessaie.'});
+    res.set('Cache-Control','no-store');res.json({ok:true,message:'Résultat enregistré.',match:r.rows[0]});
+  }catch(error){dbError(res,error,'Impossible d’enregistrer le résultat. Vérifie les journaux du serveur si le problème persiste.');}
+});
+
+// Saisie manuelle complète : permet de créer un match et d'enregistrer son score
+// en une seule opération, sans devoir programmer le match dans un premier temps.
+app.post("/api/admin/tournaments/:id/results",adminAuth,async(req,res)=>{
+  const tournamentId=String(req.params.id);
+  const homeTeamId=String(req.body?.homeTeamId||'');
+  const awayTeamId=String(req.body?.awayTeamId||'');
+  const date=req.body?.matchDate?String(req.body.matchDate):null;
+  const time=req.body?.matchTime?String(req.body.matchTime):null;
+  const n={};
+  for(const k of ['homeGoals','awayGoals','homeYellow','homeRed','awayYellow','awayRed']){
+    n[k]=Number(req.body?.[k]??0);
+    if(!Number.isInteger(n[k])||n[k]<0||n[k]>99)return res.status(400).json({error:'Les scores et cartons doivent être des nombres entiers de 0 à 99.'});
+  }
+  if(!homeTeamId||!awayTeamId||homeTeamId===awayTeamId)return res.status(400).json({error:'Sélectionne deux équipes différentes.'});
+  if((date&&!/^\d{4}-\d{2}-\d{2}$/.test(date))||(time&&!/^\d{2}:\d{2}$/.test(time)))return res.status(400).json({error:'La date ou l’heure du match est invalide.'});
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const tr=await client.query('SELECT id,group_count FROM tournaments WHERE id=$1 FOR UPDATE',[tournamentId]);
+    if(!tr.rowCount){await client.query('ROLLBACK');return res.status(404).json({error:'Tournoi introuvable.'});}
+    const teamResult=await client.query('SELECT id,team_name AS "teamName" FROM tournament_teams WHERE tournament_id=$1 AND id=ANY($2::text[])',[tournamentId,[homeTeamId,awayTeamId]]);
+    if(teamResult.rowCount!==2){await client.query('ROLLBACK');return res.status(400).json({error:'Les deux équipes doivent être inscrites à ce tournoi.'});}
+    const teams=(await client.query('SELECT id FROM tournament_teams WHERE tournament_id=$1 ORDER BY created_at,id',[tournamentId])).rows;
+    const groups=tournamentGroups(teams,tr.rows[0].group_count);
+    let groupName='Match',homeGroup='',awayGroup='';
+    for(const g of groups){if(g.teams.some(t=>t.id===homeTeamId))homeGroup=g.name;if(g.teams.some(t=>t.id===awayTeamId))awayGroup=g.name;}
+    if(homeGroup!==awayGroup){await client.query('ROLLBACK');return res.status(400).json({error:'Pour un résultat de groupe, choisis deux équipes du même groupe.'});}
+    groupName=homeGroup||'Match';
+    const id=`match-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    const saved=await client.query(`INSERT INTO tournament_matches(id,tournament_id,group_name,home_team_id,away_team_id,match_date,match_time,home_goals,away_goals,home_yellow,home_red,away_yellow,away_red,status)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'finished') RETURNING id,status,home_goals AS "homeGoals",away_goals AS "awayGoals"`,
+      [id,tournamentId,groupName,homeTeamId,awayTeamId,date,time,n.homeGoals,n.awayGoals,n.homeYellow,n.homeRed,n.awayYellow,n.awayRed]);
+    await client.query('COMMIT');
+    res.set('Cache-Control','no-store');res.status(201).json({ok:true,message:'Résultat enregistré et classement recalculé.',match:saved.rows[0]});
+  }catch(error){try{await client.query('ROLLBACK')}catch(_){};dbError(res,error,'Impossible d’enregistrer le résultat. Aucune modification n’a été confirmée.');}
+  finally{client.release();}
 });
 app.patch("/api/admin/tournaments/:id/matches/:matchId/schedule",adminAuth,async(req,res)=>{const date=req.body?.matchDate?String(req.body.matchDate):null,time=req.body?.matchTime?String(req.body.matchTime):null;if((date&&!/^\d{4}-\d{2}-\d{2}$/.test(date))||(time&&!/^\d{2}:\d{2}$/.test(time)))return res.status(400).json({error:'Date ou heure invalide.'});try{const r=await pool.query('UPDATE tournament_matches SET match_date=$3,match_time=$4 WHERE tournament_id=$1 AND id=$2 RETURNING id',[String(req.params.id),String(req.params.matchId),date,time]);if(!r.rowCount)return res.status(404).json({error:'Match introuvable.'});res.json({ok:true});}catch(error){dbError(res,error,'Impossible de modifier le calendrier.');}});
 app.delete("/api/admin/tournaments/:id/matches/:matchId",adminAuth,async(req,res)=>{try{const r=await pool.query('DELETE FROM tournament_matches WHERE tournament_id=$1 AND id=$2 RETURNING id',[String(req.params.id),String(req.params.matchId)]);if(!r.rowCount)return res.status(404).json({error:'Match introuvable.'});res.json({ok:true});}catch(error){dbError(res,error,'Impossible de supprimer le match.');}});

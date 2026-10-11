@@ -197,13 +197,23 @@ footer{border-top:1px solid var(--line);padding:42px max(20px,6vw);display:grid;
 /* Administration séparée visuellement et accessible depuis le menu */
 .admin-section{display:none}
 body.admin-open .admin-section{display:block}
+
+/* BaridiMob payment panel — aligned with JO STADIUM dark/red identity */
+.payment-panel{border:1px solid #303946;border-radius:16px;padding:17px;margin:4px 0 18px;background:linear-gradient(145deg,#141a23,#0b1016);box-shadow:inset 0 1px 0 #ffffff08}
+.payment-heading{display:flex;align-items:center;gap:10px;margin-bottom:13px;font-size:16px}.payment-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:rgba(255,59,48,.13);border:1px solid rgba(255,59,48,.28);color:#ff5148;font-size:20px;font-weight:900}
+.payment-choice{display:flex;align-items:center;gap:11px;margin:8px 0;padding:11px 12px;border:1px solid #303946;border-radius:11px;background:#0b1016;cursor:pointer;transition:border-color .2s,background .2s}.payment-choice:has(input:checked){border-color:#ff3b30;background:rgba(255,59,48,.075)}.payment-choice input{width:18px;height:18px;accent-color:#ff3b30;margin:0;flex:0 0 auto}.payment-choice span{display:flex;flex-direction:column;gap:1px}.payment-choice b{font-size:13px}.payment-choice small{font-size:11px;color:#98a3b3;font-weight:500}.baridi-fields{margin-top:15px;padding-top:15px;border-top:1px solid #252d39}.payment-recipient,.rip-row{padding:12px;border:1px solid #29323e;border-radius:11px;background:#090e15}.payment-recipient small,.rip-row small{display:block;color:#98a3b3;font-size:9px;font-weight:900;letter-spacing:1.1px;margin-bottom:4px}.payment-recipient strong,.rip-row strong{font-size:13px;overflow-wrap:anywhere}.rip-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}.copy-rip{padding:8px 12px;flex:0 0 auto;border:1px solid #ff3b30;color:#fff;background:rgba(255,59,48,.12)}.payment-hint{font-size:12px;line-height:1.55;color:#c7d0dc;margin:11px 0 14px}.payment-panel label:not(.payment-choice){margin-top:12px}.label-note{color:#98a3b3;font-size:10px;font-weight:600}.payment-panel input[type=file]{font-size:12px;padding:10px}.payment-notice{display:flex;align-items:flex-start;gap:9px;border:1px solid #543034;border-radius:10px;background:rgba(255,59,48,.065);padding:10px 11px;margin-top:12px;color:#c7d0dc}.payment-notice>span{color:#ff655d;font-weight:900}.payment-notice p{font-size:11px;line-height:1.55;margin:0}.payment-notice b{color:#fff}
+.baridimob-brand{display:flex;align-items:center;justify-content:flex-end;gap:9px;margin-top:14px;padding-top:12px;border-top:1px solid #252d39;color:#e8edf5}
+.baridimob-brand svg{width:34px;height:34px;flex:0 0 auto;filter:drop-shadow(0 2px 5px #0005)}
+.baridimob-brand span{font-size:12px;font-weight:800;letter-spacing:.2px}.baridimob-brand small{display:block;font-size:9px;color:#98a3b3;font-weight:600;letter-spacing:.6px}
+@media(max-width:650px){.payment-panel{padding:13px;border-radius:14px}.payment-heading{font-size:15px}.payment-choice{padding:10px}.payment-recipient strong,.rip-row strong{font-size:12px}.rip-row{align-items:flex-start}.copy-rip{font-size:12px;padding:8px 10px}}
+
 </style>
 </head>
 <body>
 <header class="header">
   <a class="logo" href="#accueil"><img class="brand-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIiBhcmlhLWxhYmVsPSJMb2dvIEpPIFNUQURJVU0iPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iciIgeDE9IjAiIHgyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjZmYzYjMwIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjYjgwZjE4Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PGNpcmNsZSBjeD0iNjAiIGN5PSI0MyIgcj0iMjciIGZpbGw9IiNmN2Y3ZjciIHN0cm9rZT0iIzExMSIgc3Ryb2tlLXdpZHRoPSI1Ii8+PHBhdGggZD0iTTYwIDIzbDkgNy0zIDExSDU0bC0zLTExek0zOSAzOWwxMS0zIDcgOC02IDEwLTExLTN6TTgxIDM5bC0xMS0zLTcgOCA2IDEwIDExLTN6TTQ2IDYxbDktN2gxMGw5IDctNSAxMUg1MXoiIGZpbGw9IiMxNzE5MWQiLz48cGF0aCBkPSJNMTggOTFjMTAtMTIgMjUtMTggNDItMThzMzIgNiA0MiAxOHYxM0gxOHoiIGZpbGw9InVybCgjcikiLz48cGF0aCBkPSJNMjcgOTFoNjZNMzcgNzl2MjVNNjAgNzV2MjlNODMgNzl2MjUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIzIiBvcGFjaXR5PSIuOSIvPjxwYXRoIGQ9Ik0xNCAxMDRoOTIiIHN0cm9rZT0iI2Q4ZGRlNSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L3N2Zz4=" alt="Logo ballon et stade"><span class="brand-jo">JO</span><span class="brand-stadium">STADIUM</span></a>
   <button class="menu" id="menu">☰</button>
-  <nav class="nav" id="nav"><a href="#accueil">Accueil</a><a href="#stade">Le stade</a><a href="#reservation">Réserver</a><a href="#mes-reservations">Mes réservations</a><a href="#admin" class="admin-link" id="adminNavLink">Gestion d’administration</a></nav>
+  <nav class="nav" id="nav"><a href="#accueil">Accueil</a><a href="#stade">Le stade</a><a href="#reservation">Réserver</a><a href="#mes-reservations">Mes réservations</a><a href="/tournois">Tournois</a><a href="/admin" class="admin-link" id="adminNavLink">Gestion d’administration</a></nav>
 </header>
 
 <main>
@@ -277,6 +287,23 @@ body.admin-open .admin-section{display:block}
       <label>Nom complet<input id="name" required placeholder="Ex. Mohamed Benali"></label>
     </div>
     <label>Téléphone<input id="phone" type="tel" required placeholder="0550 00 00 00"></label>
+    <div class="payment-panel">
+      <div class="payment-heading"><span class="payment-icon">↗</span><strong>Mode de paiement</strong></div>
+      <label class="payment-choice"><input type="radio" name="paymentMethod" value="baridimob" checked><span><b>BaridiMob</b><small>Transfert + justificatif</small></span></label>
+      <label class="payment-choice"><input type="radio" name="paymentMethod" value="on_site"><span><b>Paiement sur place</b><small>Règlement au stade</small></span></label>
+      <div id="baridiFields" class="baridi-fields">
+        <div class="payment-recipient"><small>BÉNÉFICIAIRE</small><strong>OULD AMARA JUGURTHA</strong></div>
+        <div class="rip-row"><div><small>RIP</small><strong>00799999002247451891</strong></div><button type="button" class="btn copy-rip" id="copyRip">Copier</button></div>
+        <p class="payment-hint">Transfère le montant exact, puis joins le reçu et sa référence.</p>
+        <label>Référence de transaction<input id="transactionReference" maxlength="100" required placeholder="Référence indiquée dans BaridiMob"></label>
+        <label>Justificatif du transfert <span class="label-note">Image · 2 Mo max</span><input id="receiptFile" type="file" accept="image/jpeg,image/png,image/webp" required></label>
+        <div class="payment-notice"><span>ⓘ</span><p>Le ticket est délivré dès l’envoi. Le paiement restera <b>« À vérifier »</b> jusqu’au contrôle manuel.</p></div>
+        <div class="baridimob-brand" aria-label="BaridiMob">
+          <svg viewBox="0 0 48 48" role="img" aria-hidden="true"><defs><linearGradient id="bmBlue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#168bd2"/><stop offset="1" stop-color="#07539b"/></linearGradient></defs><rect x="2" y="2" width="44" height="44" rx="13" fill="url(#bmBlue)"/><path d="M11 15h26v18H11z" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><path d="m12 17 12 10 12-10" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 31h7" stroke="#ffd54a" stroke-width="3" stroke-linecap="round"/></svg>
+          <span>BaridiMob<small>PAIEMENT PAR TRANSFERT</small></span>
+        </div>
+      </div>
+    </div>
     <div class="total"><span>Total <small id="totalHint"></small></span><strong id="total">600 DA</strong></div>
     <button class="btn primary full" type="submit" id="submitBooking">Confirmer la réservation</button>
   </form>
@@ -386,6 +413,9 @@ body.admin-open .admin-section{display:block}
       <p><span>Type</span><b id="ticketType">—</b></p>
       <p><span>Nom</span><b id="ticketName">—</b></p>
       <p><span>Téléphone</span><b id="ticketPhone">—</b></p>
+      <p><span>Paiement</span><b id="ticketPaymentMethod">—</b></p>
+      <p><span>État du paiement</span><b id="ticketPaymentStatus">—</b></p>
+      <p><span>Réf. transaction</span><b id="ticketTransactionReference">—</b></p>
       <p><span>Stade</span><b>JO STADIUM</b></p>
       <p><span>Adresse</span><b>Boumerdes, Ouled Moussa</b></p>
     </div>
@@ -400,7 +430,7 @@ body.admin-open .admin-section{display:block}
  // Créneaux horaires originaux : ne pas modifier les heures du stade.
  const times=["16:00 - 17:00","17:00 - 18:00","18:00 - 19:00","19:00 - 20:00"];
 const PRICE=100,$=x=>document.getElementById(x),today=(()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`})();
-let selected="",bookingType="single",serverBookings=[];
+let selected="",bookingType="single",serverBookings=[],serverClosed=[];
 const LOCAL_KEY="joStadiumMyBookings";
 $("date").min=today;$(("date")).value=today;
 const now=new Date();
@@ -440,6 +470,17 @@ async function api(url,options={}){
     if(all.some(b=>b.slot===body.slot&&(b.dates||[]).some(d=>(body.dates||[]).includes(d)))){const e=new Error("Ce créneau est déjà réservé.");e.status=409;throw e;}
     const newBooking={id:Date.now(),...body,createdAt:new Date().toISOString()};all.unshift(newBooking);saveAll(all);return {booking:newBooking};
   }
+  if(url.startsWith('/api/bookings/status')){
+    const query=url.split('?')[1]||'';
+    const ids=new URLSearchParams(query).get('ids')||'';
+    const wanted=ids.split(',').filter(Boolean);
+    const active=new Set(getAll().map(b=>String(b.id)));
+    return {activeIds:wanted.filter(id=>active.has(String(id))),inactiveIds:wanted.filter(id=>!active.has(String(id)))};
+  }
+  if(url.startsWith('/api/bookings/') && url.endsWith('/status')){
+    const id=decodeURIComponent(url.split('/').slice(-2)[0]);
+    return {active:getAll().some(b=>String(b.id)===String(id))};
+  }
   if(url==='/api/admin/login'){
     const body=JSON.parse(options.body||'{}');
     if(body.password==='1234')return {ok:true,token:'demo-local-token'};
@@ -467,11 +508,16 @@ function removeLocalBooking(id){
 }
 async function refreshAvailability(){
   const dates=datesForCurrent().filter(Boolean);
-  if(!dates.length){serverBookings=[];renderSlots();return}
+  if(!dates.length){serverBookings=[];serverClosed=[];renderSlots();return}
   try{
     const data=await api('/api/availability?dates='+encodeURIComponent(dates.join(',')));
-    serverBookings=data.booked.map(x=>({dates:[x.date],slot:x.slot}));
-  }catch(e){console.error(e);serverBookings=[];}
+    serverBookings=(data.booked||[]).map(x=>({dates:[x.date],slot:x.slot}));
+    serverClosed=(data.closed||[]).map(x=>({date:x.date,slot:x.slot}));
+  }catch(e){
+    console.error(e);
+    serverBookings=[];
+    serverClosed=[];
+  }
   renderSlots();
 }
 function datesForMonth(month,weekday){
@@ -481,10 +527,19 @@ function datesForMonth(month,weekday){
  return out;
 }
 function isBooked(date,slot){return serverBookings.some(b=>b.slot===slot&&b.dates?.includes(date))}
+function isClosed(date,slot){return serverClosed.some(b=>b.date===date&&b.slot===slot)}
 function datesForCurrent(){return bookingType==="monthly"?datesForMonth($("month").value,$("weekday").value):[$("date").value]}
 function renderSlots(){
  const dates=datesForCurrent();
- $("slots").innerHTML=times.map(t=>{const busy=dates.length>0&&dates.some(d=>isBooked(d,t));return `<button type="button" class="slot ${selected===t?"selected":""} ${busy?"busy":""}" ${busy?"disabled":""} data-slot="${t}">${t}${busy?" · Réservé":""}</button>`}).join("");
+ const closedForSelection=t=>dates.length>0&&dates.some(d=>isClosed(d,t));
+ if(selected&&closedForSelection(selected))selected="";
+ $("slots").innerHTML=times.map(t=>{
+   const busy=dates.length>0&&dates.some(d=>isBooked(d,t));
+   const closed=closedForSelection(t);
+   const disabled=busy||closed;
+   const label=busy?" · Réservé":closed?" · Fermé":"";
+   return `<button type="button" class="slot ${selected===t?"selected":""} ${disabled?"busy":""}" ${disabled?"disabled":""} data-slot="${t}">${t}${label}</button>`;
+ }).join("");
  document.querySelectorAll("[data-slot]").forEach(b=>b.onclick=()=>{selected=b.dataset.slot;renderSlots();updateTotal()});
  updateMonthlyInfo();
 }
@@ -493,6 +548,18 @@ function updateTotal(){const n=Number($("players").value)||6,count=datesForCurre
 function setType(type){bookingType=type;selected="";document.querySelectorAll("[data-type]").forEach(x=>x.classList.toggle("active",x.dataset.type===type));$("singleFields").classList.toggle("hidden-fields",type!=="single");$("monthlyFields").classList.toggle("hidden-fields",type!=="monthly");$("date").required=type==="single";$("month").required=type==="monthly";updateTotal();refreshAvailability()}
 document.querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>setType(b.dataset.type));
 $("date").onchange=()=>{selected="";updateTotal();refreshAvailability()};$("month").onchange=()=>{selected="";updateTotal();refreshAvailability()};$("weekday").onchange=()=>{selected="";updateTotal();refreshAvailability()};$("players").onchange=updateTotal;
+
+document.querySelectorAll('input[name="paymentMethod"]').forEach(r=>r.addEventListener("change",()=>{
+ const online=document.querySelector('input[name="paymentMethod"]:checked')?.value==="baridimob";
+ $("baridiFields").style.display=online?"block":"none";$("transactionReference").required=online;$("receiptFile").required=online;
+}));
+$("copyRip").onclick=async()=>{try{await navigator.clipboard.writeText("00799999002247451891");alert("RIP copié.")}catch{const t=document.createElement("textarea");t.value="00799999002247451891";document.body.appendChild(t);t.select();document.execCommand("copy");t.remove();alert("RIP copié.")}};
+async function fileAsDataUrl(file){
+ if(!file)return "";
+ if(!["image/jpeg","image/png","image/webp"].includes(file.type))throw new Error("Le justificatif doit être une image JPG, PNG ou WEBP.");
+ if(file.size>2*1024*1024)throw new Error("Le justificatif dépasse 2 Mo. Choisis une image plus légère.");
+ return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error("Impossible de lire le justificatif."));reader.readAsDataURL(file)});
+}
 
 $("form").onsubmit=async e=>{
  e.preventDefault();
@@ -504,26 +571,61 @@ $("form").onsubmit=async e=>{
   const n=Number($("players").value);if(n<6||n>12){alert("Le nombre de joueurs doit être compris entre 6 et 12.");return false}
   const name=$("name").value.trim(),phone=$("phone").value.trim();if(!name||!phone){alert("Remplis ton nom et ton téléphone.");return false}
   const total=n*PRICE*dates.length;
-  const data=await api('/api/bookings',{method:'POST',body:JSON.stringify({type:bookingType,dates,month:bookingType==="monthly"?$("month").value:null,weekday:bookingType==="monthly"?Number($("weekday").value):null,slot:selected,players:n,name,phone,total})});
-  const item=data.booking;saveLocal(item);window._lastReservation=item;renderList();showTicket(item);
-  $("form").reset();$("date").value=today;$("month").value=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}`;$("players").value="6";setType("single");
+  const paymentMethod=document.querySelector('input[name="paymentMethod"]:checked')?.value||"baridimob";
+  const transactionReference=paymentMethod==="baridimob"?$("transactionReference").value.trim():"";
+  const receiptData=paymentMethod==="baridimob"?await fileAsDataUrl($("receiptFile").files[0]):"";
+  if(paymentMethod==="baridimob"&&(!transactionReference||!receiptData)){alert("Pour BaridiMob, ajoute la référence de transaction et le justificatif.");return false}
+  const data=await api('/api/bookings',{method:'POST',body:JSON.stringify({type:bookingType,dates,month:bookingType==="monthly"?$("month").value:null,weekday:bookingType==="monthly"?Number($("weekday").value):null,slot:selected,players:n,name,phone,total,paymentMethod,transactionReference,receiptData})});
+  const item=data.booking;saveLocal(item);window._lastReservation=item;renderList();await showTicket(item);
+  $("form").reset();$("date").value=today;$("month").value=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}`;$("players").value="6";document.querySelector('input[name="paymentMethod"][value="baridimob"]').checked=true;$("baridiFields").style.display="block";$("transactionReference").required=true;$("receiptFile").required=true;setType("single");
  }catch(err){console.error(err);if(err.status===409){alert(err.message);await refreshAvailability()}else alert(err.message||"Une erreur est survenue. Vérifie ta connexion puis réessaie.")}
  return false;
 };
-function showTicket(item){if(!item?.dates||!item?.slot)return;$("ticketCode").textContent="JO-"+String(item.id).slice(-6);$("ticketDate").textContent=item.type==="monthly"?`${item.dates.length} séances · ${item.month}`:new Date(item.dates[0]+"T12:00:00").toLocaleDateString("fr-FR");$("ticketSlot").textContent=item.slot;$("ticketPlayers").textContent=item.players+" joueur(s)";$("ticketTotal").textContent=Number(item.total).toLocaleString("fr-FR")+" DA";$("ticketName").textContent=item.name;$("ticketPhone").textContent=item.phone;$("ticketType").textContent=item.type==="monthly"?"Réservation mensuelle":"Réservation simple";$("ticketStatus").className="ticket-status confirmed";$("ticketStatus").textContent="RÉSERVATION CONFIRMÉE";$("ticketModal").classList.remove("hidden")}
+async function showTicket(item){
+ if(!item?.id||!item?.dates||!item?.slot)return;
+ try{
+  const check=await api('/api/bookings/status?ids='+encodeURIComponent(String(item.id)));
+  if(!(check.activeIds||[]).some(id=>String(id)===String(item.id))){
+   removeLocalBooking(item.id);renderList();
+   if(window._lastReservation&&String(window._lastReservation.id)===String(item.id))window._lastReservation=null;
+   alert("Ce ticket n'est plus valide : la réservation a été annulée.");
+   return;
+  }
+  const payment=await api('/api/bookings/'+encodeURIComponent(String(item.id))+'/status');
+  if(payment.active){item.paymentMethod=payment.paymentMethod||item.paymentMethod;item.paymentStatus=payment.paymentStatus||item.paymentStatus;item.transactionReference=payment.transactionReference||item.transactionReference;saveLocal(item)}
+ }catch(e){alert("Impossible de vérifier ce ticket auprès du serveur. Vérifie ta connexion puis réessaie.");return;}
+ $("ticketCode").textContent="JO-"+String(item.id).slice(-6);$("ticketDate").textContent=item.type==="monthly"?`${item.dates.length} séances · ${item.month}`:new Date(item.dates[0]+"T12:00:00").toLocaleDateString("fr-FR");$("ticketSlot").textContent=item.slot;$("ticketPlayers").textContent=item.players+" joueur(s)";$("ticketTotal").textContent=Number(item.total).toLocaleString("fr-FR")+" DA";$("ticketName").textContent=item.name;$("ticketPhone").textContent=item.phone;$("ticketType").textContent=item.type==="monthly"?"Réservation mensuelle":"Réservation simple";$("ticketStatus").className="ticket-status confirmed";$("ticketStatus").textContent="RÉSERVATION CONFIRMÉE";$("ticketPaymentMethod").textContent=item.paymentMethod==="baridimob"?"BaridiMob":"Paiement sur place";const ps=item.paymentStatus||(item.paymentMethod==="baridimob"?"pending":"on_site");$("ticketPaymentStatus").textContent=ps==="verified"?"PAIEMENT VÉRIFIÉ":ps==="on_site"?"À régler sur place":ps==="rejected"?"PAIEMENT REFUSÉ — CONTACTER LE STADE":"PAIEMENT À VÉRIFIER · JUSTIFICATIF ENVOYÉ";$("ticketTransactionReference").textContent=item.transactionReference||"—";window._lastReservation=item;$("ticketModal").classList.remove("hidden");
+}
 function closeTicket(){$("ticketModal").classList.add("hidden")}$('ticketClose').onclick=closeTicket;$('pdfTicket').onclick=()=>window.print();$('showTicketBtn').onclick=()=>{$('modal').classList.add('hidden');if(window._lastReservation)showTicket(window._lastReservation)};
-function renderList(){const arr=localBookings();if(!arr.length){$("list").innerHTML='<div class="empty">Aucune réservation sur cet appareil.</div>';return}$("list").innerHTML=arr.map(b=>{const dateLabel=b.type==="monthly"?`🗓️ ${b.dates.length} séances · ${b.month}`:`📅 ${new Date(b.dates[0]+"T12:00:00").toLocaleDateString("fr-FR")}`;return `<div class="booking-item"><div><h3>JO STADIUM · ${safe(b.slot)}</h3><p>🟢 Confirmée · ${dateLabel} · 👥 ${b.players} joueur(s) · ${safe(b.name)} · ${safe(b.phone)} · <strong>${Number(b.total).toLocaleString("fr-FR")} DA</strong> · ${b.type==="monthly"?"🗓️ Mensuelle":"📅 Simple"}</p></div><button class="cancel" data-ticket="${b.id}" type="button">🎫 Ticket</button></div>`}).join("");document.querySelectorAll("[data-ticket]").forEach(b=>b.onclick=()=>{const item=localBookings().find(x=>String(x.id)===String(b.dataset.ticket));if(item)showTicket(item)})}
+let ticketSyncBusy=false;
+async function syncClientReservations(){
+ if(ticketSyncBusy)return;
+ const saved=localBookings();
+ if(!saved.length)return;
+ ticketSyncBusy=true;
+ try{
+  const ids=saved.map(b=>String(b.id)).filter(Boolean);
+  const data=await api('/api/bookings/status?ids='+encodeURIComponent(ids.join(',')));
+  const active=new Set((data.activeIds||[]).map(String));
+  const removed=saved.filter(b=>!active.has(String(b.id)));
+  if(removed.length){
+   const wasOpen=removed.some(b=>window._lastReservation&&String(window._lastReservation.id)===String(b.id)&&!$("ticketModal").classList.contains("hidden"));
+   removed.forEach(b=>removeLocalBooking(b.id));
+   renderList();
+   await refreshAvailability();
+   if(wasOpen){
+    $("ticketModal").classList.add("hidden");
+    window._lastReservation=null;
+    alert("Cette réservation a été annulée par l'administration. Le ticket n'est plus valide.");
+   }
+  }
+ }catch(e){console.warn("Synchronisation des tickets momentanément indisponible",e)}
+ finally{ticketSyncBusy=false}
+}
+function renderList(){const arr=localBookings();if(!arr.length){$("list").innerHTML='<div class="empty">Aucune réservation sur cet appareil.</div>';return}$("list").innerHTML=arr.map(b=>{const dateLabel=b.type==="monthly"?`🗓️ ${b.dates.length} séances · ${b.month}`:`📅 ${new Date(b.dates[0]+"T12:00:00").toLocaleDateString("fr-FR")}`;return `<div class="booking-item"><div><h3>JO STADIUM · ${safe(b.slot)}</h3><p>🟢 Confirmée · ${dateLabel} · 👥 ${b.players} joueur(s) · ${safe(b.name)} · ${safe(b.phone)} · <strong>${Number(b.total).toLocaleString("fr-FR")} DA</strong> · ${b.type==="monthly"?"🗓️ Mensuelle":"📅 Simple"} · ${b.paymentMethod==="baridimob"?(b.paymentStatus==="verified"?"Paiement vérifié":"Paiement à vérifier"):"À régler sur place"}</p></div><button class="cancel" data-ticket="${b.id}" type="button">🎫 Ticket</button></div>`}).join("");document.querySelectorAll("[data-ticket]").forEach(b=>b.onclick=()=>{const item=localBookings().find(x=>String(x.id)===String(b.dataset.ticket));if(item)showTicket(item)})}
 function safe(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 $("menu").onclick=()=>$("nav").classList.toggle("open");
-document.querySelectorAll(".nav a").forEach(a=>a.onclick=()=>{
-  $("nav").classList.remove("open");
-  if(a.id==="adminNavLink"){
-    document.body.classList.add("admin-open");
-    setTimeout(()=>$("admin").scrollIntoView({behavior:"smooth",block:"start"}),0);
-  }else{
-    document.body.classList.remove("admin-open");
-  }
-});
+document.querySelectorAll(".nav a").forEach(a=>a.onclick=()=>{$("nav").classList.remove("open")});
 if(location.hash==="#admin"||location.pathname==="/admin"||location.pathname==="/admin/")document.body.classList.add("admin-open");
 
 function money(n){return Math.round(Number(n)||0).toLocaleString("fr-FR")+" DA";}
@@ -787,7 +889,10 @@ document.querySelectorAll("[data-chart-period]").forEach(btn=>{
 $("adminLogout").onclick=async()=>{await api('/api/admin/logout',{method:'POST'}).catch(()=>{});$("adminPanel").classList.add("hidden-fields");$("adminLogin").classList.remove("hidden-fields");$("adminPassword").value=""};
 document.querySelectorAll("[data-filter]").forEach(btn=>btn.onclick=()=>{adminFilter=btn.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===btn));adminRender()});
 function closeModal(){$("modal").classList.add("hidden")}$('close').onclick=closeModal;$('ok').onclick=closeModal;$('modal').onclick=e=>{if(e.target.id==='modal')closeModal()};
-renderList();updateTotal();refreshAvailability();
+renderList();updateTotal();refreshAvailability();syncClientReservations();
+setInterval(syncClientReservations,5000);
+setInterval(refreshAvailability,30000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)syncClientReservations()});
 </script>
 </body>
 </html>

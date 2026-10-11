@@ -277,6 +277,17 @@ body.admin-open .admin-section{display:block}
       <label>Nom complet<input id="name" required placeholder="Ex. Mohamed Benali"></label>
     </div>
     <label>Téléphone<input id="phone" type="tel" required placeholder="0550 00 00 00"></label>
+    <div style="border:1px solid #303946;border-radius:12px;padding:14px;margin:4px 0 16px;background:#0b1016">
+      <strong style="display:block;margin-bottom:10px">Mode de paiement</strong>
+      <label style="display:flex;align-items:center;gap:8px;margin:8px 0"><input style="width:auto;margin:0" type="radio" name="paymentMethod" value="baridimob" checked> BaridiMob (transfert + justificatif)</label>
+      <label style="display:flex;align-items:center;gap:8px;margin:8px 0 0"><input style="width:auto;margin:0" type="radio" name="paymentMethod" value="on_site"> Paiement sur place</label>
+      <div id="baridiFields" style="margin-top:14px">
+        <p style="font-size:12px;line-height:1.6;color:#c7d0dc;margin:0 0 10px">Bénéficiaire : <strong>OULD AMARA JUGURTHA</strong><br>RIP : <strong>00799999002247451891</strong> <button type="button" class="btn" id="copyRip" style="padding:5px 8px;margin-left:4px">Copier</button><br>Transfère le montant exact, puis joins le reçu et sa référence.</p>
+        <label>Référence de transaction<input id="transactionReference" maxlength="100" required placeholder="Référence indiquée dans BaridiMob"></label>
+        <label>Justificatif du transfert (image, 2 Mo max)<input id="receiptFile" type="file" accept="image/jpeg,image/png,image/webp" required></label>
+        <small style="display:block;color:#aeb8c6;line-height:1.5">Le ticket est délivré dès l’envoi. Le paiement restera « À vérifier » jusqu’au contrôle manuel.</small>
+      </div>
+    </div>
     <div class="total"><span>Total <small id="totalHint"></small></span><strong id="total">600 DA</strong></div>
     <button class="btn primary full" type="submit" id="submitBooking">Confirmer la réservation</button>
   </form>
@@ -386,6 +397,9 @@ body.admin-open .admin-section{display:block}
       <p><span>Type</span><b id="ticketType">—</b></p>
       <p><span>Nom</span><b id="ticketName">—</b></p>
       <p><span>Téléphone</span><b id="ticketPhone">—</b></p>
+      <p><span>Paiement</span><b id="ticketPaymentMethod">—</b></p>
+      <p><span>État du paiement</span><b id="ticketPaymentStatus">—</b></p>
+      <p><span>Réf. transaction</span><b id="ticketTransactionReference">—</b></p>
       <p><span>Stade</span><b>JO STADIUM</b></p>
       <p><span>Adresse</span><b>Boumerdes, Ouled Moussa</b></p>
     </div>
@@ -519,6 +533,18 @@ function setType(type){bookingType=type;selected="";document.querySelectorAll("[
 document.querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>setType(b.dataset.type));
 $("date").onchange=()=>{selected="";updateTotal();refreshAvailability()};$("month").onchange=()=>{selected="";updateTotal();refreshAvailability()};$("weekday").onchange=()=>{selected="";updateTotal();refreshAvailability()};$("players").onchange=updateTotal;
 
+document.querySelectorAll('input[name="paymentMethod"]').forEach(r=>r.addEventListener("change",()=>{
+ const online=document.querySelector('input[name="paymentMethod"]:checked')?.value==="baridimob";
+ $("baridiFields").style.display=online?"block":"none";$("transactionReference").required=online;$("receiptFile").required=online;
+}));
+$("copyRip").onclick=async()=>{try{await navigator.clipboard.writeText("00799999002247451891");alert("RIP copié.")}catch{const t=document.createElement("textarea");t.value="00799999002247451891";document.body.appendChild(t);t.select();document.execCommand("copy");t.remove();alert("RIP copié.")}};
+async function fileAsDataUrl(file){
+ if(!file)return "";
+ if(!["image/jpeg","image/png","image/webp"].includes(file.type))throw new Error("Le justificatif doit être une image JPG, PNG ou WEBP.");
+ if(file.size>2*1024*1024)throw new Error("Le justificatif dépasse 2 Mo. Choisis une image plus légère.");
+ return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(new Error("Impossible de lire le justificatif."));reader.readAsDataURL(file)});
+}
+
 $("form").onsubmit=async e=>{
  e.preventDefault();
  try{
@@ -529,9 +555,13 @@ $("form").onsubmit=async e=>{
   const n=Number($("players").value);if(n<6||n>12){alert("Le nombre de joueurs doit être compris entre 6 et 12.");return false}
   const name=$("name").value.trim(),phone=$("phone").value.trim();if(!name||!phone){alert("Remplis ton nom et ton téléphone.");return false}
   const total=n*PRICE*dates.length;
-  const data=await api('/api/bookings',{method:'POST',body:JSON.stringify({type:bookingType,dates,month:bookingType==="monthly"?$("month").value:null,weekday:bookingType==="monthly"?Number($("weekday").value):null,slot:selected,players:n,name,phone,total})});
-  const item=data.booking;saveLocal(item);window._lastReservation=item;renderList();showTicket(item);
-  $("form").reset();$("date").value=today;$("month").value=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}`;$("players").value="6";setType("single");
+  const paymentMethod=document.querySelector('input[name="paymentMethod"]:checked')?.value||"baridimob";
+  const transactionReference=paymentMethod==="baridimob"?$("transactionReference").value.trim():"";
+  const receiptData=paymentMethod==="baridimob"?await fileAsDataUrl($("receiptFile").files[0]):"";
+  if(paymentMethod==="baridimob"&&(!transactionReference||!receiptData)){alert("Pour BaridiMob, ajoute la référence de transaction et le justificatif.");return false}
+  const data=await api('/api/bookings',{method:'POST',body:JSON.stringify({type:bookingType,dates,month:bookingType==="monthly"?$("month").value:null,weekday:bookingType==="monthly"?Number($("weekday").value):null,slot:selected,players:n,name,phone,total,paymentMethod,transactionReference,receiptData})});
+  const item=data.booking;saveLocal(item);window._lastReservation=item;renderList();await showTicket(item);
+  $("form").reset();$("date").value=today;$("month").value=`${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,"0")}`;$("players").value="6";document.querySelector('input[name="paymentMethod"][value="baridimob"]').checked=true;$("baridiFields").style.display="block";$("transactionReference").required=true;$("receiptFile").required=true;setType("single");
  }catch(err){console.error(err);if(err.status===409){alert(err.message);await refreshAvailability()}else alert(err.message||"Une erreur est survenue. Vérifie ta connexion puis réessaie.")}
  return false;
 };
@@ -545,8 +575,10 @@ async function showTicket(item){
    alert("Ce ticket n'est plus valide : la réservation a été annulée.");
    return;
   }
+  const payment=await api('/api/bookings/'+encodeURIComponent(String(item.id))+'/status');
+  if(payment.active){item.paymentMethod=payment.paymentMethod||item.paymentMethod;item.paymentStatus=payment.paymentStatus||item.paymentStatus;item.transactionReference=payment.transactionReference||item.transactionReference;saveLocal(item)}
  }catch(e){alert("Impossible de vérifier ce ticket auprès du serveur. Vérifie ta connexion puis réessaie.");return;}
- $("ticketCode").textContent="JO-"+String(item.id).slice(-6);$("ticketDate").textContent=item.type==="monthly"?`${item.dates.length} séances · ${item.month}`:new Date(item.dates[0]+"T12:00:00").toLocaleDateString("fr-FR");$("ticketSlot").textContent=item.slot;$("ticketPlayers").textContent=item.players+" joueur(s)";$("ticketTotal").textContent=Number(item.total).toLocaleString("fr-FR")+" DA";$("ticketName").textContent=item.name;$("ticketPhone").textContent=item.phone;$("ticketType").textContent=item.type==="monthly"?"Réservation mensuelle":"Réservation simple";$("ticketStatus").className="ticket-status confirmed";$("ticketStatus").textContent="RÉSERVATION CONFIRMÉE";window._lastReservation=item;$("ticketModal").classList.remove("hidden");
+ $("ticketCode").textContent="JO-"+String(item.id).slice(-6);$("ticketDate").textContent=item.type==="monthly"?`${item.dates.length} séances · ${item.month}`:new Date(item.dates[0]+"T12:00:00").toLocaleDateString("fr-FR");$("ticketSlot").textContent=item.slot;$("ticketPlayers").textContent=item.players+" joueur(s)";$("ticketTotal").textContent=Number(item.total).toLocaleString("fr-FR")+" DA";$("ticketName").textContent=item.name;$("ticketPhone").textContent=item.phone;$("ticketType").textContent=item.type==="monthly"?"Réservation mensuelle":"Réservation simple";$("ticketStatus").className="ticket-status confirmed";$("ticketStatus").textContent="RÉSERVATION CONFIRMÉE";$("ticketPaymentMethod").textContent=item.paymentMethod==="baridimob"?"BaridiMob":"Paiement sur place";const ps=item.paymentStatus||(item.paymentMethod==="baridimob"?"pending":"on_site");$("ticketPaymentStatus").textContent=ps==="verified"?"PAIEMENT VÉRIFIÉ":ps==="on_site"?"À régler sur place":ps==="rejected"?"PAIEMENT REFUSÉ — CONTACTER LE STADE":"PAIEMENT À VÉRIFIER · JUSTIFICATIF ENVOYÉ";$("ticketTransactionReference").textContent=item.transactionReference||"—";window._lastReservation=item;$("ticketModal").classList.remove("hidden");
 }
 function closeTicket(){$("ticketModal").classList.add("hidden")}$('ticketClose').onclick=closeTicket;$('pdfTicket').onclick=()=>window.print();$('showTicketBtn').onclick=()=>{$('modal').classList.add('hidden');if(window._lastReservation)showTicket(window._lastReservation)};
 let ticketSyncBusy=false;
@@ -574,7 +606,7 @@ async function syncClientReservations(){
  }catch(e){console.warn("Synchronisation des tickets momentanément indisponible",e)}
  finally{ticketSyncBusy=false}
 }
-function renderList(){const arr=localBookings();if(!arr.length){$("list").innerHTML='<div class="empty">Aucune réservation sur cet appareil.</div>';return}$("list").innerHTML=arr.map(b=>{const dateLabel=b.type==="monthly"?`🗓️ ${b.dates.length} séances · ${b.month}`:`📅 ${new Date(b.dates[0]+"T12:00:00").toLocaleDateString("fr-FR")}`;return `<div class="booking-item"><div><h3>JO STADIUM · ${safe(b.slot)}</h3><p>🟢 Confirmée · ${dateLabel} · 👥 ${b.players} joueur(s) · ${safe(b.name)} · ${safe(b.phone)} · <strong>${Number(b.total).toLocaleString("fr-FR")} DA</strong> · ${b.type==="monthly"?"🗓️ Mensuelle":"📅 Simple"}</p></div><button class="cancel" data-ticket="${b.id}" type="button">🎫 Ticket</button></div>`}).join("");document.querySelectorAll("[data-ticket]").forEach(b=>b.onclick=()=>{const item=localBookings().find(x=>String(x.id)===String(b.dataset.ticket));if(item)showTicket(item)})}
+function renderList(){const arr=localBookings();if(!arr.length){$("list").innerHTML='<div class="empty">Aucune réservation sur cet appareil.</div>';return}$("list").innerHTML=arr.map(b=>{const dateLabel=b.type==="monthly"?`🗓️ ${b.dates.length} séances · ${b.month}`:`📅 ${new Date(b.dates[0]+"T12:00:00").toLocaleDateString("fr-FR")}`;return `<div class="booking-item"><div><h3>JO STADIUM · ${safe(b.slot)}</h3><p>🟢 Confirmée · ${dateLabel} · 👥 ${b.players} joueur(s) · ${safe(b.name)} · ${safe(b.phone)} · <strong>${Number(b.total).toLocaleString("fr-FR")} DA</strong> · ${b.type==="monthly"?"🗓️ Mensuelle":"📅 Simple"} · ${b.paymentMethod==="baridimob"?(b.paymentStatus==="verified"?"Paiement vérifié":"Paiement à vérifier"):"À régler sur place"}</p></div><button class="cancel" data-ticket="${b.id}" type="button">🎫 Ticket</button></div>`}).join("");document.querySelectorAll("[data-ticket]").forEach(b=>b.onclick=()=>{const item=localBookings().find(x=>String(x.id)===String(b.dataset.ticket));if(item)showTicket(item)})}
 function safe(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 $("menu").onclick=()=>$("nav").classList.toggle("open");
 document.querySelectorAll(".nav a").forEach(a=>a.onclick=()=>{$("nav").classList.remove("open")});

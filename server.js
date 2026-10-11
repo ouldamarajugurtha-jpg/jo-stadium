@@ -238,13 +238,17 @@ async function initDatabase() {
       name TEXT NOT NULL,
       tournament_date DATE,
       description TEXT NOT NULL DEFAULT '',
-      max_teams INTEGER NOT NULL CHECK (max_teams BETWEEN 4 AND 32),
+      max_teams INTEGER NOT NULL CHECK (max_teams BETWEEN 4 AND 48),
+      best_thirds BOOLEAN NOT NULL DEFAULT FALSE,
       group_count INTEGER NOT NULL CHECK (group_count BETWEEN 2 AND 12),
       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CHECK (group_count <= max_teams)
     )
   `);
+  await pool.query(`ALTER TABLE tournaments DROP CONSTRAINT IF EXISTS tournaments_max_teams_check`);
+  await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_max_teams_check CHECK (max_teams BETWEEN 4 AND 48)`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS best_thirds BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tournament_teams (
       id TEXT PRIMARY KEY,
@@ -259,6 +263,27 @@ async function initDatabase() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS tournament_teams_tournament_idx ON tournament_teams (tournament_id, created_at)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS tournament_team_name_unique ON tournament_teams (tournament_id, LOWER(team_name))`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tournament_matches (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      group_name TEXT NOT NULL,
+      home_team_id TEXT NOT NULL REFERENCES tournament_teams(id) ON DELETE CASCADE,
+      away_team_id TEXT NOT NULL REFERENCES tournament_teams(id) ON DELETE CASCADE,
+      match_date DATE, match_time TEXT,
+      home_score INTEGER, away_score INTEGER,
+      home_yellow INTEGER NOT NULL DEFAULT 0, away_yellow INTEGER NOT NULL DEFAULT 0,
+      home_red INTEGER NOT NULL DEFAULT 0, away_red INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','played')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (home_team_id <> away_team_id),
+      CHECK (home_score IS NULL OR home_score >= 0),
+      CHECK (away_score IS NULL OR away_score >= 0),
+      CHECK (home_yellow >= 0 AND away_yellow >= 0 AND home_red >= 0 AND away_red >= 0)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS tournament_matches_tournament_idx ON tournament_matches(tournament_id, group_name, match_date)`);
 
   console.log("Base PostgreSQL initialisée.");
 }
@@ -706,10 +731,10 @@ app.get("/api/tournaments", async (_req, res) => {
   try {
     const result = await pool.query(`
       SELECT t.id, t.name, t.tournament_date AS "tournamentDate", t.description,
-             t.max_teams AS "maxTeams", t.group_count AS "groupCount", t.status,
+             t.max_teams AS "maxTeams", t.group_count AS "groupCount", t.best_thirds AS "bestThirds", t.status,
              t.created_at AS "createdAt", COUNT(tt.id)::int AS "registeredTeams"
       FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id = t.id
-      WHERE t.status = 'open'
+      WHERE t.status = 'open' OR EXISTS (SELECT 1 FROM tournament_matches tm WHERE tm.tournament_id=t.id)
       GROUP BY t.id ORDER BY t.created_at DESC
     `);
     res.set("Cache-Control", "no-store");
@@ -755,7 +780,7 @@ app.get("/api/admin/tournaments", adminAuth, async (_req, res) => {
   try {
     const result = await pool.query(`
       SELECT t.id, t.name, t.tournament_date AS "tournamentDate", t.description,
-             t.max_teams AS "maxTeams", t.group_count AS "groupCount", t.status,
+             t.max_teams AS "maxTeams", t.group_count AS "groupCount", t.best_thirds AS "bestThirds", t.status,
              t.created_at AS "createdAt", COUNT(tt.id)::int AS "registeredTeams"
       FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id = t.id
       GROUP BY t.id ORDER BY t.created_at DESC
@@ -775,15 +800,94 @@ app.post("/api/admin/tournaments", adminAuth, async (req, res) => {
   const maxTeams = Number(req.body?.maxTeams);
   const groupCount = Number(req.body?.groupCount);
   const tournamentDate = req.body?.tournamentDate ? String(req.body.tournamentDate) : null;
-  if (name.length < 2 || name.length > 100 || !Number.isInteger(maxTeams) || maxTeams < 4 || maxTeams > 32 || !Number.isInteger(groupCount) || groupCount < 2 || groupCount > 12 || groupCount > maxTeams || (tournamentDate && !/^\d{4}-\d{2}-\d{2}$/.test(tournamentDate))) {
-    return res.status(400).json({ error: "Vérifie le nom, la date, le nombre d’équipes (4 à 32) et le nombre de groupes (2 à 12, sans dépasser le nombre d’équipes)." });
+  const bestThirds = req.body?.bestThirds === true;
+  if (name.length < 2 || name.length > 100 || !Number.isInteger(maxTeams) || maxTeams < 4 || maxTeams > 48 || !Number.isInteger(groupCount) || groupCount < 2 || groupCount > 12 || groupCount > maxTeams || (tournamentDate && !/^\d{4}-\d{2}-\d{2}$/.test(tournamentDate))) {
+    return res.status(400).json({ error: "Vérifie le nom, la date, le nombre d’équipes (4 à 48) et le nombre de groupes (2 à 12, sans dépasser le nombre d’équipes)." });
   }
   try {
     const id = `tour-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const result = await pool.query(`INSERT INTO tournaments (id,name,tournament_date,description,max_teams,group_count,status) VALUES ($1,$2,$3,$4,$5,$6,'open') RETURNING id,name,tournament_date AS "tournamentDate",description,max_teams AS "maxTeams",group_count AS "groupCount",status,created_at AS "createdAt"`, [id,name,tournamentDate,description,maxTeams,groupCount]);
+    const result = await pool.query(`INSERT INTO tournaments (id,name,tournament_date,description,max_teams,group_count,best_thirds,status) VALUES ($1,$2,$3,$4,$5,$6,$7,'open') RETURNING id,name,tournament_date AS "tournamentDate",description,max_teams AS "maxTeams",group_count AS "groupCount",best_thirds AS "bestThirds",status,created_at AS "createdAt"`, [id,name,tournamentDate,description,maxTeams,groupCount,bestThirds]);
     res.status(201).json({ tournament: { ...result.rows[0], registeredTeams: 0, groups: tournamentGroups([], groupCount) } });
   } catch (error) { dbError(res, error, "Impossible de créer le tournoi."); }
 });
+
+
+async function tournamentDetails(tournamentId) {
+  const tr = await pool.query(`SELECT id,name,tournament_date AS "tournamentDate",description,max_teams AS "maxTeams",group_count AS "groupCount",best_thirds AS "bestThirds",status FROM tournaments WHERE id=$1`, [tournamentId]);
+  if (!tr.rowCount) return null;
+  const teamsRes = await pool.query(`SELECT id,team_name AS "teamName",captain_name AS "captainName",ticket_code AS "ticketCode" FROM tournament_teams WHERE tournament_id=$1 ORDER BY created_at,id`, [tournamentId]);
+  const groups = tournamentGroups(teamsRes.rows, tr.rows[0].groupCount);
+  const matchesRes = await pool.query(`
+    SELECT m.id,m.group_name AS "groupName",m.match_date AS "matchDate",m.match_time AS "matchTime",
+      m.home_score AS "homeScore",m.away_score AS "awayScore",m.home_yellow AS "homeYellow",
+      m.away_yellow AS "awayYellow",m.home_red AS "homeRed",m.away_red AS "awayRed",m.status,
+      h.team_name AS "homeTeam",a.team_name AS "awayTeam",m.home_team_id AS "homeTeamId",m.away_team_id AS "awayTeamId"
+    FROM tournament_matches m JOIN tournament_teams h ON h.id=m.home_team_id JOIN tournament_teams a ON a.id=m.away_team_id
+    WHERE m.tournament_id=$1 ORDER BY m.group_name,m.match_date NULLS LAST,m.match_time NULLS LAST,m.created_at`, [tournamentId]);
+  const matches = matchesRes.rows;
+  const standings = groups.map(g => {
+    const rows = g.teams.map(team => ({id:team.id,teamName:team.teamName,played:0,wins:0,draws:0,losses:0,goalsFor:0,goalsAgainst:0,goalDifference:0,points:0,yellow:0,red:0}));
+    const byId = new Map(rows.map(r=>[r.id,r]));
+    for (const m of matches.filter(x=>x.groupName===g.name && x.status==='played' && x.homeScore!==null && x.awayScore!==null)) {
+      const h=byId.get(m.homeTeamId), a=byId.get(m.awayTeamId); if(!h||!a) continue;
+      h.played++;a.played++;h.goalsFor+=m.homeScore;h.goalsAgainst+=m.awayScore;a.goalsFor+=m.awayScore;a.goalsAgainst+=m.homeScore;
+      h.yellow+=m.homeYellow;a.yellow+=m.awayYellow;h.red+=m.homeRed;a.red+=m.awayRed;
+      if(m.homeScore>m.awayScore){h.wins++;h.points+=3;a.losses++}else if(m.homeScore<m.awayScore){a.wins++;a.points+=3;h.losses++}else{h.draws++;a.draws++;h.points++;a.points++}
+    }
+    rows.forEach(r=>r.goalDifference=r.goalsFor-r.goalsAgainst);
+    rows.sort((a,b)=>b.points-a.points||b.goalDifference-a.goalDifference||b.goalsFor-a.goalsFor||a.red-b.red||a.yellow-b.yellow||a.teamName.localeCompare(b.teamName));
+    rows.forEach((r,i)=>r.position=i+1);
+    return {name:g.name,teams:g.teams,standings:rows};
+  });
+  const thirdPlaces=standings.map(g=>g.standings[2]).filter(Boolean).sort((a,b)=>b.points-a.points||b.goalDifference-a.goalDifference||b.goalsFor-a.goalsFor||a.red-b.red||a.yellow-b.yellow);
+  const qualifiers = standings.flatMap(g=>g.standings.slice(0,2)).concat(tr.rows[0].bestThirds?thirdPlaces.slice(0,Math.max(0,Math.min(8,32-standings.reduce((n,g)=>n+Math.min(2,g.standings.length),0)))):[]);
+  return {...tr.rows[0],registeredTeams:teamsRes.rowCount,groups:standings,matches,bestThirdsRanking:thirdPlaces,qualifiers};
+}
+
+app.get("/api/tournaments/:id/details", async (req,res)=>{
+  try { const data=await tournamentDetails(String(req.params.id)); if(!data)return res.status(404).json({error:"Tournoi introuvable."}); res.set("Cache-Control","no-store"); res.json({tournament:data}); }
+  catch(error){ dbError(res,error,"Impossible de charger les résultats du tournoi."); }
+});
+
+app.post("/api/admin/tournaments/:id/generate-calendar", adminAuth, async (req,res)=>{
+  const tournamentId=String(req.params.id);
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const t=await client.query("SELECT id,group_count FROM tournaments WHERE id=$1 FOR UPDATE",[tournamentId]);
+    if(!t.rowCount){await client.query("ROLLBACK");return res.status(404).json({error:"Tournoi introuvable."});}
+    const existing=await client.query("SELECT COUNT(*)::int AS n FROM tournament_matches WHERE tournament_id=$1",[tournamentId]);
+    if(existing.rows[0].n){await client.query("ROLLBACK");return res.status(409).json({error:"Le calendrier existe déjà. Modifie les matchs existants plutôt que de le régénérer."});}
+    const teams=await client.query("SELECT id FROM tournament_teams WHERE tournament_id=$1 ORDER BY created_at,id",[tournamentId]);
+    const groups=tournamentGroups(teams.rows,t.rows[0].group_count);
+    let n=0;
+    for(const g of groups){
+      for(let i=0;i<g.teams.length;i++)for(let j=i+1;j<g.teams.length;j++){
+        const id=`match-${Date.now()}-${(++n).toString(36)}-${Math.random().toString(36).slice(2,6)}`;
+        await client.query(`INSERT INTO tournament_matches(id,tournament_id,group_name,home_team_id,away_team_id) VALUES($1,$2,$3,$4,$5)`,[id,tournamentId,g.name,g.teams[i].id,g.teams[j].id]);
+      }
+    }
+    await client.query("COMMIT"); res.json({ok:true,matchCount:n});
+  }catch(error){try{await client.query("ROLLBACK")}catch(_){} dbError(res,error,"Impossible de générer le calendrier.");}
+  finally{client.release();}
+});
+
+app.patch("/api/admin/tournaments/:id/matches/:matchId", adminAuth, async(req,res)=>{
+  const date=req.body?.matchDate ? String(req.body.matchDate):null;
+  const time=req.body?.matchTime ? String(req.body.matchTime):null;
+  const hs=req.body?.homeScore===''||req.body?.homeScore==null?null:Number(req.body.homeScore);
+  const as=req.body?.awayScore===''||req.body?.awayScore==null?null:Number(req.body.awayScore);
+  const nums=['homeYellow','awayYellow','homeRed','awayRed'];
+  const cards={}; for(const k of nums){cards[k]=Number(req.body?.[k]||0);if(!Number.isInteger(cards[k])||cards[k]<0||cards[k]>99)return res.status(400).json({error:"Nombre de cartons invalide."});}
+  if((hs!==null&&(!Number.isInteger(hs)||hs<0||hs>99))||(as!==null&&(!Number.isInteger(as)||as<0||as>99)))return res.status(400).json({error:"Score invalide."});
+  if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date))return res.status(400).json({error:"Date invalide."});
+  if(time&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(time))return res.status(400).json({error:"Heure invalide."});
+  try{
+    const result=await pool.query(`UPDATE tournament_matches SET match_date=$3,match_time=$4,home_score=$5,away_score=$6,home_yellow=$7,away_yellow=$8,home_red=$9,away_red=$10,status=CASE WHEN $5 IS NOT NULL AND $6 IS NOT NULL THEN 'played' ELSE 'scheduled' END WHERE id=$1 AND tournament_id=$2 RETURNING id`,[String(req.params.matchId),String(req.params.id),date,time,hs,as,cards.homeYellow,cards.awayYellow,cards.homeRed,cards.awayRed]);
+    if(!result.rowCount)return res.status(404).json({error:"Match introuvable."});res.json({ok:true});
+  }catch(error){dbError(res,error,"Impossible d'enregistrer le match.");}
+});
+
 
 app.patch("/api/admin/tournaments/:id/status", adminAuth, async (req, res) => {
   const status = String(req.body?.status || "");

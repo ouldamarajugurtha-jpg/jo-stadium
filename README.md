@@ -1,24 +1,32 @@
-# JO STADIUM — version améliorée des tournois
+# JO STADIUM — version tournoi améliorée
+
+## Contenu
+- `server.js` : serveur Express et API PostgreSQL.
+- `index.html` : site public de réservation, avec le logo BaridiMob fourni dans `public/baridimob-logo.png`.
+- `admin.html` : administration des réservations.
+- `public/tournaments.html` : inscription client, calendrier, résultats et classements publics.
+- `public/admin-tournaments.html` : administration du tournoi, création du calendrier, saisie des scores et cartons.
+- `public/baridimob-logo.png` : image fournie pour remplacer l'icône bleue créée précédemment.
 
 ## Déploiement Render
-1. Utilise une base PostgreSQL persistante et configure `DATABASE_URL`.
-2. Configure `ADMIN_PASSWORD` avec un mot de passe administrateur fort.
-3. Build command : `npm install`
-4. Start command : `npm start`
-5. Node.js 18 ou plus récent est requis.
+1. Décompresser l'archive et pousser son contenu dans le dépôt GitHub du service Render.
+2. La racine du dépôt doit contenir `server.js`, `package.json`, `index.html`, `admin.html` et le dossier `public/`.
+3. Commande de démarrage : `npm start`.
+4. Configurer `DATABASE_URL` avec la même base PostgreSQL que celle qui contient les réservations existantes.
+5. Configurer `ADMIN_PASSWORD` dans les variables d'environnement Render. Ne pas mettre le vrai mot de passe dans GitHub.
+6. Déployer et vérifier `/api/health`, puis les réservations avant de tester les tournois.
 
-Les tables tournois/équipes/matchs sont créées automatiquement. La migration élargit la limite à 48 équipes et conserve les réservations déjà stockées dans PostgreSQL.
-
-## Fonctions de tournoi
+## Fonctionnalités tournoi
 - Jusqu'à 48 équipes et 12 groupes.
-- Option de qualification des meilleurs troisièmes.
-- Calendrier aller simple automatique dans chaque groupe.
-- Modification des dates/heures des matchs.
-- Saisie des scores et cartons jaunes/rouges.
-- Classements recalculés automatiquement.
-- Consultation publique des résultats et classements.
-- Persistance des matchs et tournois dans PostgreSQL.
+- Qualification optionnelle de 2 à 8 meilleurs troisièmes, ou désactivée.
+- Génération du calendrier round-robin, déclenchée lorsque la capacité maximale est atteinte ou manuellement depuis l'administration.
+- Modification de la date/heure de chaque match.
+- Saisie des scores, jaunes et rouges, avec sauvegarde PostgreSQL.
+- Calcul automatique des points (3 victoire, 1 nul), différence de buts, buts marqués et classements.
+- Les deux premières places de chaque groupe sont indiquées en vert ; les meilleurs troisièmes qualifiés en bleu.
+- Les clients peuvent consulter les tournois, les résultats et les classements, même lorsque les inscriptions sont fermées.
 
-## Important
-Ce ZIP reprend les pages `index.html` et `admin.html` du précédent projet retrouvé, ainsi que le `server.js` et les deux pages tournoi fournis dans cette conversation. Le JavaScript serveur et les scripts des deux pages tournoi ont passé `node --check`. Une connexion réelle à PostgreSQL/Render n'a pas pu être testée ici : vérifie `DATABASE_URL` et `ADMIN_PASSWORD` dans Render avant de déplo
-yer.
+## Important — sauvegarde
+Le serveur ajoute les tables et colonnes nécessaires via des migrations idempotentes sans supprimer les réservations existantes. Il faut impérativement conserver la même base PostgreSQL. Faire une sauvegarde de la base avant le déploiement est recommandé.
+
+Le code a été contrôlé pour la syntaxe JavaScript et la structure des fichiers. La connexion à la base Render et les requêtes SQL doivent encore être vérifiées sur l'instance de production, car cette archive ne contient pas les identifiants de ta base.

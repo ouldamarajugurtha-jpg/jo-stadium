@@ -247,6 +247,7 @@ async function initDatabase() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       tournament_date DATE,
+      registration_deadline TIMESTAMPTZ,
       description TEXT NOT NULL DEFAULT '',
       max_teams INTEGER NOT NULL CHECK (max_teams BETWEEN 4 AND 48),
       group_count INTEGER NOT NULL CHECK (group_count BETWEEN 2 AND 24),
@@ -314,6 +315,7 @@ async function initDatabase() {
   // les tables de tournoi avec un schéma plus ancien. Ajouter les colonnes manquantes
   // évite que /api/tournaments échoue au premier SELECT après un redéploiement.
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS tournament_date DATE`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS registration_deadline TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS max_teams INTEGER NOT NULL DEFAULT 16`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS group_count INTEGER NOT NULL DEFAULT 4`);
@@ -952,7 +954,11 @@ async function advanceWinner(executor, tournamentId, match, winnerId) {
   if (!next.rowCount) return;
   const target = next.rows[0];
   const column = Number(match.matchNumber) % 2 === 1 ? 'home_team_id' : 'away_team_id';
-  await executor.query(`UPDATE tournament_matches SET ${column}=$2 WHERE id=$1`, [target.id, winnerId]);
+  if (target.status === 'bye') {
+    await executor.query(`UPDATE tournament_matches SET ${column}=$2,status='scheduled',home_goals=NULL,away_goals=NULL,home_penalties=NULL,away_penalties=NULL,home_yellow=0,home_red=0,away_yellow=0,away_red=0,scorers='[]'::jsonb WHERE id=$1`, [target.id, winnerId]);
+  } else {
+    await executor.query(`UPDATE tournament_matches SET ${column}=$2 WHERE id=$1`, [target.id, winnerId]);
+  }
   const feeders = await executor.query(`SELECT status,home_team_id,away_team_id FROM tournament_matches WHERE tournament_id=$1 AND phase='knockout' AND round_number=$2 AND match_number IN ($3,$4)`, [tournamentId, Number(match.roundNumber), nextMatchNumber * 2 - 1, nextMatchNumber * 2]);
   if (feeders.rowCount === 2 && feeders.rows.every(x => ['finished','bye'].includes(x.status))) {
     const refreshed = await executor.query(`SELECT id,home_team_id AS "homeTeamId",away_team_id AS "awayTeamId",status,round_number AS "roundNumber",match_number AS "matchNumber" FROM tournament_matches WHERE id=$1 FOR UPDATE`, [target.id]);
@@ -1016,9 +1022,27 @@ async function maybeRefreshKnockout(executor, tournamentId) {
   if (old.rows.some(m => m.status === 'finished')) return false;
   return createKnockoutIfReady(executor, tournamentId, old.rowCount > 0);
 }
+/* Ferme les inscriptions à l'échéance configurée, au début du jour du tournoi
+   si aucune échéance n'a été précisée, ou dès que le quota d'équipes est atteint. */
+async function closeExpiredTournamentRegistrations(executor = pool, tournamentId = null) {
+  const params = [];
+  let filter = '';
+  if (tournamentId) { params.push(String(tournamentId)); filter = `AND t.id = $${params.length}`; }
+  await executor.query(`
+    UPDATE tournaments AS t SET status = 'closed'
+     WHERE t.status = 'open' ${filter}
+       AND (
+         (t.registration_deadline IS NOT NULL AND t.registration_deadline <= NOW())
+         OR (t.registration_deadline IS NULL AND t.tournament_date IS NOT NULL
+             AND t.tournament_date <= (NOW() AT TIME ZONE 'Africa/Algiers')::date)
+         OR (SELECT COUNT(*) FROM tournament_teams tt WHERE tt.tournament_id = t.id) >= t.max_teams
+       )`, params);
+}
+
 app.get('/api/tournaments', async (_req, res) => {
   try {
-    const result = await pool.query(`SELECT t.id,t.name,t.tournament_date AS "tournamentDate",t.description,t.max_teams AS "maxTeams",t.group_count AS "groupCount",t.best_third_count AS "bestThirdCount",t.status,t.created_at AS "createdAt",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id GROUP BY t.id ORDER BY t.created_at DESC`);
+    await closeExpiredTournamentRegistrations();
+    const result = await pool.query(`SELECT t.id,t.name,t.tournament_date AS "tournamentDate",t.registration_deadline AS "registrationDeadline",t.description,t.max_teams AS "maxTeams",t.group_count AS "groupCount",t.best_third_count AS "bestThirdCount",t.status,t.created_at AS "createdAt",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id GROUP BY t.id ORDER BY t.created_at DESC`);
     const tournaments = []; for (const t of result.rows) tournaments.push(await getTournamentDetails(t, false));
     res.set('Cache-Control','no-store'); res.json({ tournaments });
   } catch (error) { dbError(res, error, 'Impossible de charger les tournois et résultats.'); }
@@ -1031,9 +1055,13 @@ app.post('/api/tournaments/:id/register', async (req, res) => {
     await client.query('BEGIN'); const tr = await client.query('SELECT * FROM tournaments WHERE id=$1 FOR UPDATE', [String(req.params.id)]);
     if (!tr.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Tournoi introuvable.' }); }
     const tournament = tr.rows[0];
-    if (tournament.status !== 'open') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Les inscriptions à ce tournoi sont fermées.' }); }
+    const deadlinePassed = tournament.registration_deadline ? new Date(tournament.registration_deadline).getTime() <= Date.now() : Boolean(tournament.tournament_date && String(tournament.tournament_date).slice(0,10) <= getStadiumDateTime().date);
     const count = await client.query('SELECT COUNT(*)::int AS n FROM tournament_teams WHERE tournament_id=$1', [tournament.id]);
-    if (count.rows[0].n >= tournament.max_teams) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Ce tournoi est complet.' }); }
+    if (tournament.status !== 'open' || deadlinePassed || count.rows[0].n >= tournament.max_teams) {
+      if (tournament.status === 'open' && (deadlinePassed || count.rows[0].n >= tournament.max_teams)) await client.query(`UPDATE tournaments SET status='closed' WHERE id=$1`, [tournament.id]);
+      await client.query('COMMIT');
+      return res.status(409).json({ error: count.rows[0].n >= tournament.max_teams ? 'Ce tournoi est complet : les inscriptions sont automatiquement fermées.' : 'La date limite est passée : les inscriptions à ce tournoi sont fermées.' });
+    }
     const hasDraw = await client.query(`SELECT 1 FROM tournament_matches WHERE tournament_id=$1 LIMIT 1`, [tournament.id]);
     if (hasDraw.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Le calendrier est déjà généré. Les inscriptions sont verrouillées pour préserver les matchs.' }); }
     const duplicate = await client.query('SELECT 1 FROM tournament_teams WHERE tournament_id=$1 AND LOWER(team_name)=LOWER($2)', [tournament.id, teamName]);
@@ -1059,24 +1087,42 @@ app.post('/api/tournaments/:id/register', async (req, res) => {
     const assignedGroup = eligible[Math.floor(Math.random() * eligible.length)].name;
     const id = `team-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, ticketCode = `JOT-${Math.random().toString(36).slice(2,6).toUpperCase()}-${Date.now().toString().slice(-6)}`;
     const inserted = await client.query(`INSERT INTO tournament_teams(id,tournament_id,team_name,captain_name,phone,ticket_code,payment_status,group_name) VALUES($1,$2,$3,$4,$5,$6,'on_site',$7) RETURNING id,team_name AS "teamName",captain_name AS "captainName",phone,ticket_code AS "ticketCode",payment_status AS "paymentStatus",group_name AS "groupName",created_at AS "createdAt"`, [id,tournament.id,teamName,captainName,phone,ticketCode,assignedGroup]);
-    await client.query('COMMIT'); res.set('Cache-Control','no-store').status(201).json({ ok: true, tournament: { id: tournament.id, name: tournament.name }, team: inserted.rows[0], paymentMessage: 'Ticket d’inscription créé. Groupe attribué automatiquement. Frais à régler sur place.' });
+    const newCount = Number(count.rows[0].n) + 1;
+    if (newCount >= Number(tournament.max_teams)) await client.query(`UPDATE tournaments SET status='closed' WHERE id=$1`, [tournament.id]);
+    await client.query('COMMIT'); res.set('Cache-Control','no-store').status(201).json({ ok: true, tournament: { id: tournament.id, name: tournament.name }, team: inserted.rows[0], registrationClosed: newCount >= Number(tournament.max_teams), paymentMessage: 'Ticket d’inscription créé. Groupe attribué automatiquement. Frais à régler sur place.' });
   } catch (error) { try { await client.query('ROLLBACK'); } catch (_) {} if (error.code === '23505') return res.status(409).json({ error: 'Cette équipe est déjà inscrite à ce tournoi.' }); dbError(res,error,'Impossible d’inscrire cette équipe.'); }
   finally { client.release(); }
 });
 app.get('/api/admin/tournaments', adminAuth, async (_req, res) => {
   try {
-    const result = await pool.query(`SELECT t.id,t.name,t.tournament_date AS "tournamentDate",t.description,t.max_teams AS "maxTeams",t.group_count AS "groupCount",t.best_third_count AS "bestThirdCount",t.status,t.created_at AS "createdAt",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id GROUP BY t.id ORDER BY t.created_at DESC`);
+    await closeExpiredTournamentRegistrations();
+    const result = await pool.query(`SELECT t.id,t.name,t.tournament_date AS "tournamentDate",t.registration_deadline AS "registrationDeadline",t.description,t.max_teams AS "maxTeams",t.group_count AS "groupCount",t.best_third_count AS "bestThirdCount",t.status,t.created_at AS "createdAt",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id GROUP BY t.id ORDER BY t.created_at DESC`);
     const tournaments = []; for (const t of result.rows) tournaments.push(await getTournamentDetails(t, true));
     res.set('Cache-Control','no-store'); res.json({ tournaments });
   } catch (error) { dbError(res,error,'Impossible de charger les tournois administrateur.'); }
 });
 app.post('/api/admin/tournaments', adminAuth, async (req, res) => {
-  const name=String(req.body?.name||'').trim(), description=String(req.body?.description||'').trim().slice(0,500), maxTeams=Number(req.body?.maxTeams), groupCount=Number(req.body?.groupCount), bestThirdCount=Number(req.body?.bestThirdCount||0), tournamentDate=req.body?.tournamentDate?String(req.body.tournamentDate):null;
-  if (name.length<2 || name.length>100 || !Number.isInteger(maxTeams) || maxTeams<4 || maxTeams>48 || !Number.isInteger(groupCount) || groupCount<2 || groupCount>24 || groupCount>maxTeams || !Number.isInteger(bestThirdCount) || !(bestThirdCount===0 || (bestThirdCount>=2 && bestThirdCount<=8)) || (tournamentDate&&!/^\d{4}-\d{2}-\d{2}$/.test(tournamentDate))) return res.status(400).json({error:'Vérifie le nom, les équipes (4 à 48), les groupes (2 à 24) et les meilleurs troisièmes (désactivé ou 2 à 8).'});
-  try { const id=`tour-${Date.now()}-${Math.random().toString(36).slice(2,6)}`; const r=await pool.query(`INSERT INTO tournaments(id,name,tournament_date,description,max_teams,group_count,best_third_count,status) VALUES($1,$2,$3,$4,$5,$6,$7,'open') RETURNING id,name,tournament_date AS "tournamentDate",description,max_teams AS "maxTeams",group_count AS "groupCount",best_third_count AS "bestThirdCount",status,created_at AS "createdAt"`,[id,name,tournamentDate,description,maxTeams,groupCount,bestThirdCount]); res.status(201).json({tournament:{...r.rows[0],registeredTeams:0}}); }
+  const name=String(req.body?.name||'').trim(), description=String(req.body?.description||'').trim().slice(0,500), maxTeams=Number(req.body?.maxTeams), groupCount=Number(req.body?.groupCount), bestThirdCount=Number(req.body?.bestThirdCount||0), tournamentDate=req.body?.tournamentDate?String(req.body.tournamentDate):null, registrationDeadline=req.body?.registrationDeadline?String(req.body.registrationDeadline):null;
+  const deadlineValid = !registrationDeadline || (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(registrationDeadline) && !Number.isNaN(new Date(`${registrationDeadline}:00+01:00`).getTime()));
+  if (name.length<2 || name.length>100 || !Number.isInteger(maxTeams) || maxTeams<4 || maxTeams>48 || !Number.isInteger(groupCount) || groupCount<2 || groupCount>24 || groupCount>maxTeams || !Number.isInteger(bestThirdCount) || !(bestThirdCount===0 || (bestThirdCount>=2 && bestThirdCount<=8)) || (tournamentDate&&!/^\d{4}-\d{2}-\d{2}$/.test(tournamentDate)) || !deadlineValid) return res.status(400).json({error:'Vérifie le nom, les dates, les équipes (4 à 48), les groupes (2 à 24) et les meilleurs troisièmes.'});
+  try { const id=`tour-${Date.now()}-${Math.random().toString(36).slice(2,6)}`; const deadlineIso=registrationDeadline?new Date(`${registrationDeadline}:00+01:00`):null; const r=await pool.query(`INSERT INTO tournaments(id,name,tournament_date,registration_deadline,description,max_teams,group_count,best_third_count,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'open') RETURNING id,name,tournament_date AS "tournamentDate",registration_deadline AS "registrationDeadline",description,max_teams AS "maxTeams",group_count AS "groupCount",best_third_count AS "bestThirdCount",status,created_at AS "createdAt"`,[id,name,tournamentDate,deadlineIso,description,maxTeams,groupCount,bestThirdCount]); res.status(201).json({tournament:{...r.rows[0],registeredTeams:0}}); }
   catch(error) { dbError(res,error,'Impossible de créer le tournoi.'); }
 });
-app.patch('/api/admin/tournaments/:id/status', adminAuth, async (req,res) => { const status=String(req.body?.status||''); if(!['open','closed'].includes(status)) return res.status(400).json({error:'Statut invalide.'}); try { if(status==='open'){const scheduled=await pool.query('SELECT 1 FROM tournament_matches WHERE tournament_id=$1 LIMIT 1',[String(req.params.id)]);if(scheduled.rowCount)return res.status(409).json({error:'Les inscriptions ne peuvent pas être rouvertes après le tirage. Réinitialise le calendrier avant d’ajouter une équipe.'});} const r=await pool.query('UPDATE tournaments SET status=$2 WHERE id=$1 RETURNING id,status',[String(req.params.id),status]); if(!r.rowCount)return res.status(404).json({error:'Tournoi introuvable.'}); res.json({ok:true,tournament:r.rows[0]}); } catch(error) { dbError(res,error,'Impossible de modifier le tournoi.'); } });
+app.patch('/api/admin/tournaments/:id/status', adminAuth, async (req,res) => { const status=String(req.body?.status||''); if(!['open','closed'].includes(status)) return res.status(400).json({error:'Statut invalide.'}); try { if(status==='open'){await closeExpiredTournamentRegistrations();const current=await pool.query(`SELECT t.registration_deadline AS "registrationDeadline",t.tournament_date AS "tournamentDate",t.max_teams AS "maxTeams",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id WHERE t.id=$1 GROUP BY t.id`,[String(req.params.id)]);if(!current.rowCount)return res.status(404).json({error:'Tournoi introuvable.'});const x=current.rows[0];if(x.registrationDeadline&&new Date(x.registrationDeadline).getTime()<=Date.now())return res.status(409).json({error:'La date limite est passée : ce tournoi ne peut plus être rouvert.'});if(!x.registrationDeadline&&x.tournamentDate&&String(x.tournamentDate).slice(0,10)<=getStadiumDateTime().date)return res.status(409).json({error:'Le jour du tournoi est arrivé : les inscriptions ne peuvent plus être rouvertes.'});if(Number(x.registeredTeams)>=Number(x.maxTeams))return res.status(409).json({error:'Le quota maximal est atteint : les inscriptions ne peuvent plus être rouvertes.'});const scheduled=await pool.query('SELECT 1 FROM tournament_matches WHERE tournament_id=$1 LIMIT 1',[String(req.params.id)]);if(scheduled.rowCount)return res.status(409).json({error:'Les inscriptions ne peuvent pas être rouvertes après le tirage. Réinitialise le calendrier avant d’ajouter une équipe.'});} const r=await pool.query('UPDATE tournaments SET status=$2 WHERE id=$1 RETURNING id,status',[String(req.params.id),status]); if(!r.rowCount)return res.status(404).json({error:'Tournoi introuvable.'}); res.json({ok:true,tournament:r.rows[0]}); } catch(error) { dbError(res,error,'Impossible de modifier le tournoi.'); } });
+app.patch('/api/admin/tournaments/:id/registration-deadline', adminAuth, async (req,res) => {
+  const value = req.body?.registrationDeadline ? String(req.body.registrationDeadline) : null;
+  if (value && (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) || Number.isNaN(new Date(`${value}:00+01:00`).getTime()))) {
+    return res.status(400).json({error:'Format de date invalide. Utilise AAAA-MM-JJTHH:MM.'});
+  }
+  try {
+    const deadline = value ? new Date(`${value}:00+01:00`) : null;
+    const result = await pool.query('UPDATE tournaments SET registration_deadline=$2 WHERE id=$1 RETURNING id,status,registration_deadline AS "registrationDeadline"', [String(req.params.id), deadline]);
+    if (!result.rowCount) return res.status(404).json({error:'Tournoi introuvable.'});
+    await closeExpiredTournamentRegistrations(pool, String(req.params.id));
+    const refreshed = await pool.query('SELECT status FROM tournaments WHERE id=$1', [String(req.params.id)]);
+    res.set('Cache-Control','no-store').json({ok:true,status:refreshed.rows[0].status,registrationDeadline:result.rows[0].registrationDeadline});
+  } catch(error) { dbError(res,error,'Impossible de modifier la date limite des inscriptions.'); }
+});
 app.delete('/api/admin/tournaments/:id', adminAuth, async (req,res) => { try { const r=await pool.query('DELETE FROM tournaments WHERE id=$1 RETURNING id',[String(req.params.id)]); if(!r.rowCount)return res.status(404).json({error:'Tournoi introuvable.'}); res.json({ok:true}); } catch(error) { dbError(res,error,'Impossible de supprimer le tournoi.'); } });
 app.post('/api/admin/tournaments/:id/generate-schedule', adminAuth, async (req,res) => {
   const tournamentId=String(req.params.id), startDate=String(req.body?.startDate||''), startTime=normalizeTime(req.body?.startTime), matchesPerDay=Number(req.body?.matchesPerDay||4);
@@ -1160,7 +1206,7 @@ async function saveMatchResult(req,res,manual=false) {
   const client=await pool.connect();
   try {
     await client.query('BEGIN');
-    let matchId=String(req.params.matchId||''), phase='group', groupName='', homeId=homeTeamId, awayId=awayTeamId, roundNumber=1, matchNumber=1;
+    let matchId=String(req.params.matchId||''), phase='group', groupName='', homeId=homeTeamId, awayId=awayTeamId, roundNumber=1, matchNumber=1, previousMatch=null;
     if(manual) {
       const tr=await client.query('SELECT id,group_count AS "groupCount" FROM tournaments WHERE id=$1 FOR UPDATE',[tournamentId]);
       if(!tr.rowCount){await client.query('ROLLBACK');return res.status(404).json({error:'Tournoi introuvable.'});}
@@ -1176,15 +1222,23 @@ async function saveMatchResult(req,res,manual=false) {
       if(existing.rowCount){const old=existing.rows[0];matchId=old.id;roundNumber=Number(old.roundNumber||1);matchNumber=Number(old.matchNumber||1);if(old.homeTeamId===awayTeamId){[n.homeGoals,n.awayGoals]=[n.awayGoals,n.homeGoals];[n.homeYellow,n.awayYellow]=[n.awayYellow,n.homeYellow];[n.homeRed,n.awayRed]=[n.awayRed,n.homeRed];scorers=scorers.map(x=>({...x,side:x.side==='home'?'away':'home'}));}}
       else matchId=`match-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     } else {
-      const existing=await client.query(`SELECT id,phase,group_name AS "groupName",home_team_id AS "homeTeamId",away_team_id AS "awayTeamId",round_number AS "roundNumber",match_number AS "matchNumber",status FROM tournament_matches WHERE tournament_id=$1 AND id=$2 FOR UPDATE`,[tournamentId,matchId]);
+      const existing=await client.query(`SELECT id,phase,group_name AS "groupName",home_team_id AS "homeTeamId",away_team_id AS "awayTeamId",round_number AS "roundNumber",match_number AS "matchNumber",status,home_goals AS "homeGoals",away_goals AS "awayGoals",home_penalties AS "homePenalties",away_penalties AS "awayPenalties" FROM tournament_matches WHERE tournament_id=$1 AND id=$2 FOR UPDATE`,[tournamentId,matchId]);
       if(!existing.rowCount){await client.query('ROLLBACK');return res.status(404).json({error:'Match introuvable. Actualise la page.'});}
-      const m=existing.rows[0]; phase=m.phase;groupName=m.groupName;homeId=m.homeTeamId;awayId=m.awayTeamId;roundNumber=Number(m.roundNumber||1);matchNumber=Number(m.matchNumber||1);if(m.status==='bye'){await client.query('ROLLBACK');return res.status(400).json({error:'Cette équipe est déjà qualifiée automatiquement. Aucun score à saisir pour ce passage.'});}if(!homeId||!awayId){await client.query('ROLLBACK');return res.status(400).json({error:'Les deux équipes de ce match ne sont pas encore déterminées.'});}
+      const m=existing.rows[0]; previousMatch=m; phase=m.phase;groupName=m.groupName;homeId=m.homeTeamId;awayId=m.awayTeamId;roundNumber=Number(m.roundNumber||1);matchNumber=Number(m.matchNumber||1);if(m.status==='bye'){await client.query('ROLLBACK');return res.status(400).json({error:'Cette équipe est déjà qualifiée automatiquement. Aucun score à saisir pour ce passage.'});}if(!homeId||!awayId){await client.query('ROLLBACK');return res.status(400).json({error:'Les deux équipes de ce match ne sont pas encore déterminées.'});}
     }
     if(phase==='group'){const koStarted=await client.query("SELECT 1 FROM tournament_matches WHERE tournament_id=$1 AND phase='knockout' AND status='finished' LIMIT 1",[tournamentId]);if(koStarted.rowCount){await client.query('ROLLBACK');return res.status(409).json({error:'La phase éliminatoire a déjà commencé. Les résultats de poule sont verrouillés pour préserver le tableau.'});}}
     if(phase==='knockout' && n.homeGoals===n.awayGoals && (body.homePenalties==null || body.homePenalties==='' || body.awayPenalties==null || body.awayPenalties==='' || penalties.home===penalties.away)) {
-      await client.query('ROLLBACK'); return res.status(400).json({error:'En phase éliminatoire, il faut un vainqueur. Si le score est nul, saisis les tirs au but et un score différent.'});
+      await client.query('ROLLBACK'); return res.status(400).json({error:'En phase éliminatoire, il faut un vainqueur. Si le score est nul, saisis deux scores de tirs au but différents.'});
     }
     const hp=body.homePenalties==null||body.homePenalties===''?null:penalties.home, ap=body.awayPenalties==null||body.awayPenalties===''?null:penalties.away;
+    if (!manual && phase==='knockout' && previousMatch && previousMatch.status==='finished') {
+      const oldWinner = Number(previousMatch.homeGoals)>Number(previousMatch.awayGoals) ? homeId : Number(previousMatch.awayGoals)>Number(previousMatch.homeGoals) ? awayId : (Number(previousMatch.homePenalties)>Number(previousMatch.awayPenalties) ? homeId : Number(previousMatch.awayPenalties)>Number(previousMatch.homePenalties) ? awayId : null);
+      const newWinner = n.homeGoals>n.awayGoals ? homeId : n.awayGoals>n.homeGoals ? awayId : (penalties.home>penalties.away ? homeId : penalties.away>penalties.home ? awayId : null);
+      if (oldWinner && newWinner && oldWinner!==newWinner) {
+        const laterFinished=await client.query("SELECT 1 FROM tournament_matches WHERE tournament_id=$1 AND phase='knockout' AND round_number>$2 AND status='finished' LIMIT 1",[tournamentId,roundNumber]);
+        if(laterFinished.rowCount){await client.query('ROLLBACK');return res.status(409).json({error:'Le vainqueur changerait un tour déjà terminé. Corrige d’abord les résultats des tours suivants, puis réenregistre ce match.'});}
+      }
+    }
     if(manual) {
       await client.query(`INSERT INTO tournament_matches(id,tournament_id,group_name,home_team_id,away_team_id,match_date,match_time,home_goals,away_goals,home_yellow,home_red,away_yellow,away_red,status,phase,round_name,round_number,match_number,scorers)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'finished','group',$3,$14,$15,$16::jsonb)
@@ -1243,6 +1297,9 @@ app.get("*", (_req, res) => {
 async function startServer() {
   try {
     await initDatabase();
+    await closeExpiredTournamentRegistrations();
+    const registrationCloser = setInterval(() => closeExpiredTournamentRegistrations().catch(error => console.error('Échec de fermeture automatique des inscriptions :', error.message)), 30000);
+    if (typeof registrationCloser.unref === 'function') registrationCloser.unref();
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(

@@ -23,6 +23,45 @@
 .top-actions #logoutBtn:hover{background:linear-gradient(135deg,#ff3949,#c9081b);border-color:#ff6873;box-shadow:0 0 18px rgba(229,9,20,.38);}
 @media(max-width:650px){.topinner{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 0}.brand{grid-column:1;grid-row:1;align-self:start}.top-actions{grid-column:2;grid-row:1 / span 2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;width:min(100%,300px);align-items:stretch}.top-actions .btn{width:100%;min-width:0;box-sizing:border-box;padding:11px 9px;font-size:12px;white-space:nowrap;text-align:center}.top-actions a.btn:first-child{grid-column:1 / -1;justify-self:end;width:auto;min-width:150px}.top-actions #refreshBtn{grid-column:1;grid-row:2}.top-actions #logoutBtn{grid-column:2;grid-row:2;margin-left:0;border-color:#b91c2b;background:linear-gradient(135deg,#f52235,#a90717);color:#fff;box-shadow:0 5px 18px rgba(229,9,20,.22)}}
 
+
+/* Optimisation mobile Android : fiche de réservation entièrement consultable */
+.modal{
+  padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+  place-items: start center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.modal-card{
+  width: min(680px, 100%);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+  margin: auto 0;
+}
+.detail-grid{gap: 12px 16px;}
+.detail-grid small{font-size: 11px;line-height:1.35;margin-bottom:4px;}
+.detail-grid strong{display:block;line-height:1.35;overflow-wrap:anywhere;word-break:break-word;}
+.receipt-preview{max-height:min(32dvh,280px);width:100%;object-fit:contain;}
+.modal-actions{position:sticky;bottom:-1px;z-index:2;background:var(--panel);padding-top:10px;padding-bottom:2px;margin-top:16px;}
+.modal-actions .btn{min-height:44px;min-width:0;font-size:12px;padding:9px 8px;}
+@media(max-width:520px){
+  .modal{padding: max(6px, env(safe-area-inset-top)) 7px max(6px, env(safe-area-inset-bottom));}
+  .modal-card{width:100%;max-height:calc(100dvh - 12px);padding:15px;border-radius:16px;}
+  .modal-card h2{font-size:21px;line-height:1.2;margin-bottom:14px;overflow-wrap:anywhere;}
+  .detail-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:11px 12px;}
+  .detail-grid small{font-size:10px;letter-spacing:.5px;}
+  .detail-grid strong{font-size:13px;}
+  .receipt-preview{max-height:27dvh;margin-top:8px;}
+  .modal-actions{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:7px;margin-top:14px;}
+  .modal-actions .btn{font-size:11px;line-height:1.25;padding:9px 6px;white-space:normal;}
+  #detailCancel{grid-column:1 / -1;}
+}
+@media(max-height:700px){
+  .modal-card{max-height:calc(100dvh - 12px);}
+  .receipt-preview{max-height:22dvh;}
+}
+
 </style>
 </head>
 <body>

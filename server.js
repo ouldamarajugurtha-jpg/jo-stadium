@@ -348,6 +348,7 @@ async function initDatabase() {
   await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS match_number INTEGER NOT NULL DEFAULT 1`);
   await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS home_penalties INTEGER`);
   await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS away_penalties INTEGER`);
+  await pool.query(`ALTER TABLE tournament_matches ADD COLUMN IF NOT EXISTS scorers JSONB NOT NULL DEFAULT '[]'::jsonb`);
   // Harmoniser les anciennes contraintes de statut : certains anciens schémas
   // n'acceptaient pas la valeur "finished", ce qui faisait échouer la sauvegarde.
   await pool.query(`DO $$ DECLARE c RECORD; BEGIN
@@ -859,7 +860,7 @@ function mapMatch(row) {
     homeYellow: Number(row.homeYellow || 0), homeRed: Number(row.homeRed || 0),
     awayYellow: Number(row.awayYellow || 0), awayRed: Number(row.awayRed || 0),
     homePenalties: row.homePenalties == null ? null : Number(row.homePenalties),
-    awayPenalties: row.awayPenalties == null ? null : Number(row.awayPenalties), status: row.status
+    awayPenalties: row.awayPenalties == null ? null : Number(row.awayPenalties), scorers: Array.isArray(row.scorers) ? row.scorers : [], status: row.status
   };
 }
 async function getTournamentDetails(tournament, admin = false, executor = pool) {
@@ -872,18 +873,34 @@ async function getTournamentDetails(tournament, admin = false, executor = pool) 
       COALESCE(ht.team_name,'À déterminer') AS "homeTeamName",COALESCE(at.team_name,'À déterminer') AS "awayTeamName",
       m.match_date AS "matchDate",m.match_time AS "matchTime",m.home_goals AS "homeGoals",m.away_goals AS "awayGoals",
       m.home_yellow AS "homeYellow",m.home_red AS "homeRed",m.away_yellow AS "awayYellow",m.away_red AS "awayRed",
-      m.home_penalties AS "homePenalties",m.away_penalties AS "awayPenalties",m.status
+      m.home_penalties AS "homePenalties",m.away_penalties AS "awayPenalties",m.scorers,m.status
     FROM tournament_matches m LEFT JOIN tournament_teams ht ON ht.id=m.home_team_id LEFT JOIN tournament_teams at ON at.id=m.away_team_id
     WHERE m.tournament_id=$1
     ORDER BY CASE WHEN m.phase='group' THEN 0 ELSE 1 END,m.round_number,m.match_number,m.match_date NULLS LAST,m.match_time NULLS LAST,m.created_at`, [tournament.id]);
   const matches = matchesResult.rows.map(mapMatch);
   const standings = calculateStandings(groups, matches, tournament.bestThirdCount);
+  const scorerTotals = new Map();
+  for (const match of matches) {
+    if (match.status !== 'finished') continue;
+    for (const scorer of (match.scorers || [])) {
+      const playerName = String(scorer.name || '').trim();
+      const goals = Number(scorer.goals || 0);
+      const teamName = String(scorer.teamName || (scorer.side === 'home' ? match.homeTeamName : match.awayTeamName) || '').trim();
+      if (!playerName || !Number.isInteger(goals) || goals < 1) continue;
+      const key = playerName.toLocaleLowerCase('fr');
+      const item = scorerTotals.get(key) || { name: playerName, goals: 0, teams: new Set() };
+      item.goals += goals;
+      if (teamName) item.teams.add(teamName);
+      scorerTotals.set(key, item);
+    }
+  }
+  const topScorers = [...scorerTotals.values()].map(x => ({name:x.name, goals:x.goals, teams:[...x.teams]})).sort((x,y)=>y.goals-x.goals || x.name.localeCompare(y.name,'fr')).slice(0,50);
   // Public clients need team names and groups, never captains' phone numbers or ticket codes.
   const visibleGroups = groups.map(group => ({
     ...group,
     teams: group.teams.map(team => admin ? team : ({ id: team.id, teamName: team.teamName, groupName: team.groupName || group.name }))
   }));
-  return { ...tournament, groups: visibleGroups, standings, matches, teams: admin ? teams : undefined };
+  return { ...tournament, groups: visibleGroups, standings, matches, topScorers, teams: admin ? teams : undefined };
 }
 function shuffle(items) {
   const out = [...items];
@@ -1118,6 +1135,24 @@ async function saveMatchResult(req,res,manual=false) {
   const penalties={home:Number(body.homePenalties),away:Number(body.awayPenalties)};
   if(body.homePenalties!==undefined && body.homePenalties!=='' && (!Number.isInteger(penalties.home)||penalties.home<0||penalties.home>99))return res.status(400).json({error:'Tirs au but invalides.'});
   if(body.awayPenalties!==undefined && body.awayPenalties!=='' && (!Number.isInteger(penalties.away)||penalties.away<0||penalties.away>99))return res.status(400).json({error:'Tirs au but invalides.'});
+  const cleanScorers = (input, side) => {
+    if (!Array.isArray(input)) return [];
+    const out = [];
+    for (const raw of input.slice(0, 100)) {
+      const name = String(raw?.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+      const goals = Number(raw?.goals);
+      if (!name) continue;
+      if (!Number.isInteger(goals) || goals < 1 || goals > 99) throw new Error('Chaque buteur doit avoir un nom et un nombre de buts entier entre 1 et 99.');
+      out.push({name, goals, side});
+    }
+    return out;
+  };
+  let scorers;
+  try { scorers = [...cleanScorers(body.homeScorers, 'home'), ...cleanScorers(body.awayScorers, 'away')]; }
+  catch (error) { return res.status(400).json({error:error.message}); }
+  const homeScorerGoals = scorers.filter(x=>x.side==='home').reduce((sum,x)=>sum+x.goals,0);
+  const awayScorerGoals = scorers.filter(x=>x.side==='away').reduce((sum,x)=>sum+x.goals,0);
+  if (homeScorerGoals > n.homeGoals || awayScorerGoals > n.awayGoals) return res.status(400).json({error:'Le total des buts attribués aux buteurs ne peut pas dépasser le score de leur équipe.'});
   const homeTeamId=String(body.homeTeamId||''),awayTeamId=String(body.awayTeamId||'');
   const date=body.matchDate?String(body.matchDate):null,time=body.matchTime?String(body.matchTime):null;
   if(manual && (!homeTeamId||!awayTeamId||homeTeamId===awayTeamId))return res.status(400).json({error:'Sélectionne deux équipes différentes.'});
@@ -1138,7 +1173,7 @@ async function saveMatchResult(req,res,manual=false) {
       if(!homeGroup||!awayGroup||homeGroup.name!==awayGroup.name){await client.query('ROLLBACK');return res.status(400).json({error:'Les résultats de poule doivent concerner deux équipes du même groupe.'});}
       groupName=homeGroup.name;
       const existing=await client.query(`SELECT id,phase,home_team_id AS "homeTeamId",away_team_id AS "awayTeamId",round_number AS "roundNumber",match_number AS "matchNumber" FROM tournament_matches WHERE tournament_id=$1 AND phase='group' AND ((home_team_id=$2 AND away_team_id=$3) OR (home_team_id=$3 AND away_team_id=$2)) ORDER BY CASE WHEN status='scheduled' THEN 0 ELSE 1 END,created_at LIMIT 1 FOR UPDATE`,[tournamentId,homeTeamId,awayTeamId]);
-      if(existing.rowCount){const old=existing.rows[0];matchId=old.id;roundNumber=Number(old.roundNumber||1);matchNumber=Number(old.matchNumber||1);if(old.homeTeamId===awayTeamId){[n.homeGoals,n.awayGoals]=[n.awayGoals,n.homeGoals];[n.homeYellow,n.awayYellow]=[n.awayYellow,n.homeYellow];[n.homeRed,n.awayRed]=[n.awayRed,n.homeRed];}}
+      if(existing.rowCount){const old=existing.rows[0];matchId=old.id;roundNumber=Number(old.roundNumber||1);matchNumber=Number(old.matchNumber||1);if(old.homeTeamId===awayTeamId){[n.homeGoals,n.awayGoals]=[n.awayGoals,n.homeGoals];[n.homeYellow,n.awayYellow]=[n.awayYellow,n.homeYellow];[n.homeRed,n.awayRed]=[n.awayRed,n.homeRed];scorers=scorers.map(x=>({...x,side:x.side==='home'?'away':'home'}));}}
       else matchId=`match-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     } else {
       const existing=await client.query(`SELECT id,phase,group_name AS "groupName",home_team_id AS "homeTeamId",away_team_id AS "awayTeamId",round_number AS "roundNumber",match_number AS "matchNumber",status FROM tournament_matches WHERE tournament_id=$1 AND id=$2 FOR UPDATE`,[tournamentId,matchId]);
@@ -1151,12 +1186,15 @@ async function saveMatchResult(req,res,manual=false) {
     }
     const hp=body.homePenalties==null||body.homePenalties===''?null:penalties.home, ap=body.awayPenalties==null||body.awayPenalties===''?null:penalties.away;
     if(manual) {
-      await client.query(`INSERT INTO tournament_matches(id,tournament_id,group_name,home_team_id,away_team_id,match_date,match_time,home_goals,away_goals,home_yellow,home_red,away_yellow,away_red,status,phase,round_name,round_number,match_number)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'finished','group',$3,$14,$15)
-        ON CONFLICT(id) DO UPDATE SET match_date=EXCLUDED.match_date,match_time=EXCLUDED.match_time,home_goals=EXCLUDED.home_goals,away_goals=EXCLUDED.away_goals,home_yellow=EXCLUDED.home_yellow,home_red=EXCLUDED.home_red,away_yellow=EXCLUDED.away_yellow,away_red=EXCLUDED.away_red,status='finished'`,[matchId,tournamentId,groupName,homeTeamId,awayTeamId,date,time,n.homeGoals,n.awayGoals,n.homeYellow,n.homeRed,n.awayYellow,n.awayRed,roundNumber,matchNumber]);
+      await client.query(`INSERT INTO tournament_matches(id,tournament_id,group_name,home_team_id,away_team_id,match_date,match_time,home_goals,away_goals,home_yellow,home_red,away_yellow,away_red,status,phase,round_name,round_number,match_number,scorers)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'finished','group',$3,$14,$15,$16::jsonb)
+        ON CONFLICT(id) DO UPDATE SET match_date=EXCLUDED.match_date,match_time=EXCLUDED.match_time,home_goals=EXCLUDED.home_goals,away_goals=EXCLUDED.away_goals,home_yellow=EXCLUDED.home_yellow,home_red=EXCLUDED.home_red,away_yellow=EXCLUDED.away_yellow,away_red=EXCLUDED.away_red,scorers=EXCLUDED.scorers,status='finished'`,[matchId,tournamentId,groupName,homeTeamId,awayTeamId,date,time,n.homeGoals,n.awayGoals,n.homeYellow,n.homeRed,n.awayYellow,n.awayRed,roundNumber,matchNumber,JSON.stringify(scorers)]);
     } else {
-      await client.query(`UPDATE tournament_matches SET home_goals=$3,away_goals=$4,home_yellow=$5,home_red=$6,away_yellow=$7,away_red=$8,home_penalties=$9,away_penalties=$10,status='finished' WHERE tournament_id=$1 AND id=$2`,[tournamentId,matchId,n.homeGoals,n.awayGoals,n.homeYellow,n.homeRed,n.awayYellow,n.awayRed,hp,ap]);
+      await client.query(`UPDATE tournament_matches SET home_goals=$3,away_goals=$4,home_yellow=$5,home_red=$6,away_yellow=$7,away_red=$8,home_penalties=$9,away_penalties=$10,scorers=$11::jsonb,status='finished' WHERE tournament_id=$1 AND id=$2`,[tournamentId,matchId,n.homeGoals,n.awayGoals,n.homeYellow,n.homeRed,n.awayYellow,n.awayRed,hp,ap,JSON.stringify(scorers)]);
     }
+    const scorerTeams = await client.query('SELECT id,team_name AS name FROM tournament_teams WHERE id = ANY($1::text[])', [[homeId,awayId].filter(Boolean)]);
+    const scorerTeamNames = Object.fromEntries(scorerTeams.rows.map(row=>[row.id,row.name]));
+    scorers = scorers.map(x=>({...x,teamName:scorerTeamNames[x.side==='home'?homeId:awayId] || ''}));
     if(phase==='knockout') {
       const winnerId=n.homeGoals>n.awayGoals?homeId:n.awayGoals>n.homeGoals?awayId:(penalties.home>penalties.away?homeId:awayId);
       const matchRow={phase,roundNumber,matchNumber};

@@ -250,7 +250,7 @@ async function initDatabase() {
       registration_deadline TIMESTAMPTZ,
       description TEXT NOT NULL DEFAULT '',
       max_teams INTEGER NOT NULL CHECK (max_teams BETWEEN 4 AND 48),
-      group_count INTEGER NOT NULL CHECK (group_count BETWEEN 2 AND 24),
+      group_count INTEGER NOT NULL CHECK (group_count BETWEEN 1 AND 24),
       best_third_count INTEGER NOT NULL DEFAULT 0 CHECK (best_third_count BETWEEN 0 AND 8),
       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

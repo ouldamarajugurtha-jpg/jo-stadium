@@ -281,7 +281,7 @@ async function initDatabase() {
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS competition_type TEXT NOT NULL DEFAULT 'cup'`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS season_format TEXT NOT NULL DEFAULT 'single'`);
   await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_max_teams_check CHECK (max_teams BETWEEN 4 AND 48)`);
-  await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_group_count_check CHECK ((competition_type = 'league' AND group_count = 1) OR (competition_type <> 'league' AND group_count BETWEEN 2 AND 24))`);
+  await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_group_count_check CHECK (group_count BETWEEN 2 AND 24)`);
   await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_best_third_count_check CHECK (best_third_count BETWEEN 0 AND 8)`);
   await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_group_count_le_max_check CHECK (group_count <= max_teams)`);
   await pool.query(`

@@ -51,7 +51,7 @@
 .champion-badge{display:inline-block;color:#ffe58a;border:1px solid #d4a72c;background:#3a2b08;border-radius:8px;padding:3px 7px;font-size:10px;vertical-align:middle;letter-spacing:1px}
 .team-rank.league-rank-first,.standing-rank.league-rank-first{display:inline-flex;align-items:center;justify-content:center;min-width:28px;width:28px;height:28px;border-radius:50%;background:linear-gradient(145deg,#ff4654,#a90820);border:1px solid #ff7881;color:#fff!important;box-shadow:0 0 12px #ff26353d;font-weight:950}.team-rank.other{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#aeb8c7!important}
 .filter-family{width:100%;padding:10px 0;border-bottom:1px solid #29323d}.filter-family>strong{display:block;color:#ff777d;font-size:12px;letter-spacing:.5px;margin:0 0 8px}.filter-family-buttons{display:flex;gap:8px;flex-wrap:wrap}.matches-toolbar{display:block!important}
-.format-choice{margin:20px 0 24px;padding:18px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}.format-choice h2{margin:0 0 4px;font-size:1.2rem}.format-choice-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.format-choice-btn{min-height:48px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:#090d13;color:var(--text);font:inherit;font-weight:750;cursor:pointer}.format-choice-btn.active{background:var(--red);border-color:var(--red);color:#fff}@media(max-width:560px){.format-choice-buttons{grid-template-columns:1fr}.format-choice-btn{text-align:left}}</style></head><body><header class="top"><a class="brand" href="/">JO <span>STADIUM</span></a><a class="btn" href="/">← Retour au site</a></header><main class="shell"><section class="intro"><div class="eyebrow">JO STADIUM · COMPÉTITION</div><h1>Tournois de football</h1><p class="muted">Inscris ton équipe, consulte le calendrier et suis les résultats et classements mis à jour après chaque résultat validé.</p></section><div id="notice" class="notice" role="status"></div><section class="format-choice" aria-label="Choisir le format"><h2>Choisir un format de compétition</h2><p class="muted">Affiche uniquement les tournois correspondant à ton choix.</p><div class="format-choice-buttons"><button type="button" class="format-choice-btn active" data-format-choice="all">Tous les formats</button><button type="button" class="format-choice-btn" data-format-choice="league">🏆 Championnat</button><button type="button" class="format-choice-btn" data-format-choice="groups">⚽ Tournoi par groupes</button></div></section><section id="list" class="list"><div class="empty">Chargement des tournois…</div></section></main><footer>JO STADIUM · Calendriers, résultats et classements</footer><script>
+.format-choice{margin:20px 0 24px;padding:18px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}.format-choice h2{margin:0 0 4px;font-size:1.2rem}.format-choice-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.format-choice-btn{min-height:48px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:#090d13;color:var(--text);font:inherit;font-weight:750;cursor:pointer}.format-choice-btn.active{background:var(--red);border-color:var(--red);color:#fff}.group-tournament-picker{margin-top:14px}.group-tournament-picker label{display:block;margin-bottom:7px;font-weight:800}.group-tournament-picker select{width:100%;min-height:50px;border:1px solid var(--line);border-radius:12px;background:#080d13;color:var(--text);padding:12px;font:inherit;font-weight:700}.group-tournament-picker[hidden]{display:none}@media(max-width:560px){.format-choice-buttons{grid-template-columns:1fr}.format-choice-btn{text-align:left}}</style></head><body><header class="top"><a class="brand" href="/">JO <span>STADIUM</span></a><a class="btn" href="/">← Retour au site</a></header><main class="shell"><section class="intro"><div class="eyebrow">JO STADIUM · COMPÉTITION</div><h1>Tournois de football</h1><p class="muted">Inscris ton équipe, consulte le calendrier et suis les résultats et classements mis à jour après chaque résultat validé.</p></section><div id="notice" class="notice" role="status"></div><section class="format-choice" aria-label="Choisir le format"><h2>Choisir un format de compétition</h2><p class="muted">Affiche uniquement les tournois correspondant à ton choix.</p><div class="format-choice-buttons"><button type="button" class="format-choice-btn active" data-format-choice="all">Tous les formats</button><button type="button" class="format-choice-btn" data-format-choice="league">🏆 Championnat</button><button type="button" class="format-choice-btn" data-format-choice="groups">⚽ Tournoi par groupes</button></div><div class="group-tournament-picker" id="groupTournamentPicker" hidden><label for="groupTournamentSelect">Sélectionner un tournoi par groupes</label><select id="groupTournamentSelect"><option value="all">Tous les tournois par groupes</option></select></div></section><section id="list" class="list"><div class="empty">Chargement des tournois…</div></section></main><footer>JO STADIUM · Calendriers, résultats et classements</footer><script>
 'use strict';
 const $ = id => document.getElementById(id);
 let tournaments = [];
@@ -154,16 +154,32 @@ function render(){
 }
 function setupFormatChoice(){
   const buttons=[...document.querySelectorAll('[data-format-choice]')];
-  const apply=choice=>{
+  const picker=$('groupTournamentPicker');
+  const select=$('groupTournamentSelect');
+  const groupTournaments=tournaments.filter(t=>t.competitionType!=='league');
+  const currentSelection=select.value||'all';
+  select.innerHTML='<option value="all">Tous les tournois par groupes</option>'+groupTournaments.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+  select.value=groupTournaments.some(t=>String(t.id)===currentSelection)?currentSelection:'all';
+  const apply=(choice,selectedTournament=select.value||'all')=>{
     buttons.forEach(button=>button.classList.toggle('active',button.dataset.formatChoice===choice));
+    picker.hidden=choice!=='groups'||groupTournaments.length===0;
     document.querySelectorAll('[data-tournament-card]').forEach(card=>{
-      card.style.display=choice==='all'||card.dataset.competitionType===choice?'':'none';
+      const formatMatches=choice==='all'||card.dataset.competitionType===choice;
+      const tournamentMatches=choice!=='groups'||selectedTournament==='all'||String(card.dataset.tournamentCard)===String(selectedTournament);
+      card.style.display=formatMatches&&tournamentMatches?'':'none';
     });
-    try{localStorage.setItem('joStadiumClientFormatChoice',choice);}catch(_){}
+    try{localStorage.setItem('joStadiumClientFormatChoice',choice);localStorage.setItem('joStadiumClientGroupTournament',selectedTournament);}catch(_){}
   };
-  buttons.forEach(button=>button.onclick=()=>apply(button.dataset.formatChoice));
-  let saved='all';try{saved=localStorage.getItem('joStadiumClientFormatChoice')||'all';}catch(_){}
-  apply(buttons.some(button=>button.dataset.formatChoice===saved)?saved:'all');
+  buttons.forEach(button=>button.onclick=()=>{
+    const choice=button.dataset.formatChoice;
+    if(choice==='groups')select.value='all';
+    apply(choice,select.value||'all');
+  });
+  select.onchange=()=>apply('groups',select.value);
+  let saved='all',savedTournament='all';
+  try{saved=localStorage.getItem('joStadiumClientFormatChoice')||'all';savedTournament=localStorage.getItem('joStadiumClientGroupTournament')||'all';}catch(_){}
+  if(groupTournaments.some(t=>String(t.id)===savedTournament))select.value=savedTournament;
+  apply(buttons.some(button=>button.dataset.formatChoice===saved)?saved:'all',select.value||'all');
 }
 async function load(force=false){
   // Do not replace the page while someone is filling in a registration form or a draft is present.

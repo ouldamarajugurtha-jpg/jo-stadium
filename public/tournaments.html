@@ -41,6 +41,13 @@
 .scorer-rank.rank-3{background:linear-gradient(145deg,#ff4654,#a90820);border-color:#ff7881;color:#fff!important;box-shadow:0 0 12px #ff26353d}
 .scorer-goals{color:#fff;text-shadow:0 0 12px #ff273b3b}.scorers-empty{padding:18px 15px;color:#aeb8c7;font-size:13px}
 @media(max-width:420px){.team-rank{flex-basis:22px!important;width:22px!important;height:22px;min-width:22px;font-size:11px!important}.top-scorers-list{max-height:330px}}
+
+/* Espacement amélioré entre le numéro de rang, la boule de qualification et le nom */
+.team-cell{gap:10px!important}
+.team-rank{margin-right:2px}
+.team-cell .qualification-dot{margin-left:1px!important;margin-right:2px!important}
+@media(max-width:650px){.team-cell{gap:8px!important}.team-rank{margin-right:1px}}
+
 </style></head><body><header class="top"><a class="brand" href="/">JO <span>STADIUM</span></a><a class="btn" href="/">← Retour au site</a></header><main class="shell"><section class="intro"><div class="eyebrow">JO STADIUM · COMPÉTITION</div><h1>Tournois de football</h1><p class="muted">Inscris ton équipe, consulte le calendrier et suis les résultats et classements mis à jour après chaque résultat validé.</p></section><div id="notice" class="notice" role="status"></div><section id="list" class="list"><div class="empty">Chargement des tournois…</div></section></main><footer>JO STADIUM · Calendriers, résultats et classements</footer><script>
 'use strict';
 const $ = id => document.getElementById(id);

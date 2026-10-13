@@ -278,6 +278,8 @@ async function initDatabase() {
   await pool.query(`ALTER TABLE tournaments DROP CONSTRAINT IF EXISTS tournaments_best_third_count_check`);
   await pool.query(`ALTER TABLE tournaments DROP CONSTRAINT IF EXISTS tournaments_group_count_le_max_check`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS best_third_count INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS competition_type TEXT NOT NULL DEFAULT 'cup'`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS season_format TEXT NOT NULL DEFAULT 'single'`);
   await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_max_teams_check CHECK (max_teams BETWEEN 4 AND 48)`);
   await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_group_count_check CHECK (group_count BETWEEN 2 AND 24)`);
   await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_best_third_count_check CHECK (best_third_count BETWEEN 0 AND 8)`);
@@ -320,6 +322,14 @@ async function initDatabase() {
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS max_teams INTEGER NOT NULL DEFAULT 16`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS group_count INTEGER NOT NULL DEFAULT 4`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS best_third_count INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS competition_type TEXT NOT NULL DEFAULT 'cup'`);
+  await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS season_format TEXT NOT NULL DEFAULT 'single'`);
+  await pool.query(`ALTER TABLE tournaments DROP CONSTRAINT IF EXISTS tournaments_group_count_check`);
+  await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_group_count_check CHECK (group_count BETWEEN 1 AND 24)`);
+  await pool.query(`ALTER TABLE tournaments DROP CONSTRAINT IF EXISTS tournaments_competition_type_check`);
+  await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_competition_type_check CHECK (competition_type IN ('cup','league'))`);
+  await pool.query(`ALTER TABLE tournaments DROP CONSTRAINT IF EXISTS tournaments_season_format_check`);
+  await pool.query(`ALTER TABLE tournaments ADD CONSTRAINT tournaments_season_format_check CHECK (season_format IN ('single','double'))`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'open'`);
   await pool.query(`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
 
@@ -868,7 +878,8 @@ function mapMatch(row) {
 async function getTournamentDetails(tournament, admin = false, executor = pool) {
   const teamsResult = await executor.query(`SELECT id, team_name AS "teamName", captain_name AS "captainName", phone, ticket_code AS "ticketCode", payment_status AS "paymentStatus", group_name AS "groupName", created_at AS "createdAt" FROM tournament_teams WHERE tournament_id=$1 ORDER BY created_at ASC,id ASC`, [tournament.id]);
   const teams = teamsResult.rows;
-  const groups = tournamentGroups(teams, tournament.groupCount);
+  const isLeague = tournament.competitionType === 'league';
+  const groups = isLeague ? [{ name: 'Championnat', teams: teams.map(team => ({ ...team, groupName: 'Championnat' })) }] : tournamentGroups(teams, tournament.groupCount);
   const matchesResult = await executor.query(`
     SELECT m.id,m.tournament_id AS "tournamentId",m.group_name AS "groupName",m.phase,m.round_name AS "roundName",
       m.round_number AS "roundNumber",m.match_number AS "matchNumber",m.home_team_id AS "homeTeamId",m.away_team_id AS "awayTeamId",
@@ -880,7 +891,19 @@ async function getTournamentDetails(tournament, admin = false, executor = pool) 
     WHERE m.tournament_id=$1
     ORDER BY CASE WHEN m.phase='group' THEN 0 ELSE 1 END,m.round_number,m.match_number,m.match_date NULLS LAST,m.match_time NULLS LAST,m.created_at`, [tournament.id]);
   const matches = matchesResult.rows.map(mapMatch);
-  const standings = calculateStandings(groups, matches, tournament.bestThirdCount);
+  let standings = calculateStandings(groups, isLeague ? matches.map(m => m.phase==='league' ? {...m,phase:'group'} : m) : matches, tournament.bestThirdCount);
+  if (isLeague) {
+    const table = standings[0]?.standings || [];
+    const playedHeadToHead = (a,b) => matches.filter(m => m.status === 'finished' && m.phase !== 'knockout' && ((m.homeTeamId===a.id&&m.awayTeamId===b.id)||(m.homeTeamId===b.id&&m.awayTeamId===a.id)));
+    const mini = (team, tied) => { let points=0,gf=0,ga=0; for(const other of tied){if(other.id===team.id)continue;for(const m of playedHeadToHead(team,other)){const home=m.homeTeamId===team.id, own=Number(home?m.homeGoals:m.awayGoals), opp=Number(home?m.awayGoals:m.homeGoals);gf+=own;ga+=opp;if(own>opp)points+=3;else if(own===opp)points++;}}return {points,diff:gf-ga,gf}; };
+    table.sort((a,b)=> { if(b.points!==a.points)return b.points-a.points; const tied=table.filter(x=>x.points===a.points); if(tied.length>1){const ma=mini(a,tied),mb=mini(b,tied);if(mb.points!==ma.points)return mb.points-ma.points;if(mb.diff!==ma.diff)return mb.diff-ma.diff;if(mb.gf!==ma.gf)return mb.gf-ma.gf;} if(b.goalDifference!==a.goalDifference)return b.goalDifference-a.goalDifference; if(b.goalsFor!==a.goalsFor)return b.goalsFor-a.goalsFor; return a.teamName.localeCompare(b.teamName,'fr'); });
+    table.forEach((x,i)=>{x.rank=i+1;x.qualification='';});
+    const finished=matches.filter(m=>m.phase!=='knockout');
+    const expected=teams.length*(teams.length-1)/2*(tournament.seasonFormat==='double'?2:1);
+    const champion=teams.length>=5 && finished.length===expected && finished.every(m=>m.status==='finished') && table.length ? table[0] : null;
+    standings = [{name:'Championnat', standings:table}];
+    tournament = {...tournament, champion: champion ? {id:champion.id,teamName:champion.teamName} : null, leagueComplete: Boolean(champion)};
+  }
   const scorerTotals = new Map();
   for (const match of matches) {
     if (match.status !== 'finished') continue;
@@ -897,12 +920,15 @@ async function getTournamentDetails(tournament, admin = false, executor = pool) 
     }
   }
   const topScorers = [...scorerTotals.values()].map(x => ({name:x.name, goals:x.goals, teams:[...x.teams]})).sort((x,y)=>y.goals-x.goals || x.name.localeCompare(y.name,'fr')).slice(0,50);
+  const assistTotals = new Map();
+  for (const match of matches) { if (match.status !== 'finished') continue; for (const player of (match.scorers || [])) { const name=String(player.name||'').trim(), assists=Number(player.assists||0), teamName=String(player.teamName || (player.side==='home'?match.homeTeamName:match.awayTeamName)||'').trim(); if(!name||!Number.isInteger(assists)||assists<1)continue; const key=name.toLocaleLowerCase('fr'); const item=assistTotals.get(key)||{name,assists:0,teams:new Set()};item.assists+=assists;if(teamName)item.teams.add(teamName);assistTotals.set(key,item); } }
+  const topAssists=[...assistTotals.values()].map(x=>({name:x.name,assists:x.assists,teams:[...x.teams]})).sort((a,b)=>b.assists-a.assists||a.name.localeCompare(b.name,'fr')).slice(0,50);
   // Public clients need team names and groups, never captains' phone numbers or ticket codes.
   const visibleGroups = groups.map(group => ({
     ...group,
     teams: group.teams.map(team => admin ? team : ({ id: team.id, teamName: team.teamName, groupName: team.groupName || group.name }))
   }));
-  return { ...tournament, groups: visibleGroups, standings, matches, topScorers, teams: admin ? teams : undefined };
+  return { ...tournament, groups: visibleGroups, standings, matches, topScorers, topAssists, teams: admin ? teams : undefined };
 }
 function shuffle(items) {
   const out = [...items];
@@ -1042,7 +1068,7 @@ async function closeExpiredTournamentRegistrations(executor = pool, tournamentId
 app.get('/api/tournaments', async (_req, res) => {
   try {
     await closeExpiredTournamentRegistrations();
-    const result = await pool.query(`SELECT t.id,t.name,t.tournament_date AS "tournamentDate",t.registration_deadline AS "registrationDeadline",t.description,t.max_teams AS "maxTeams",t.group_count AS "groupCount",t.best_third_count AS "bestThirdCount",t.status,t.created_at AS "createdAt",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id GROUP BY t.id ORDER BY t.created_at DESC`);
+    const result = await pool.query(`SELECT t.id,t.name,t.tournament_date AS "tournamentDate",t.registration_deadline AS "registrationDeadline",t.description,t.max_teams AS "maxTeams",t.group_count AS "groupCount",t.best_third_count AS "bestThirdCount",t.competition_type AS "competitionType",t.season_format AS "seasonFormat",t.status,t.created_at AS "createdAt",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id GROUP BY t.id ORDER BY t.created_at DESC`);
     const tournaments = []; for (const t of result.rows) tournaments.push(await getTournamentDetails(t, false));
     res.set('Cache-Control','no-store'); res.json({ tournaments });
   } catch (error) { dbError(res, error, 'Impossible de charger les tournois et résultats.'); }
@@ -1096,16 +1122,17 @@ app.post('/api/tournaments/:id/register', async (req, res) => {
 app.get('/api/admin/tournaments', adminAuth, async (_req, res) => {
   try {
     await closeExpiredTournamentRegistrations();
-    const result = await pool.query(`SELECT t.id,t.name,t.tournament_date AS "tournamentDate",t.registration_deadline AS "registrationDeadline",t.description,t.max_teams AS "maxTeams",t.group_count AS "groupCount",t.best_third_count AS "bestThirdCount",t.status,t.created_at AS "createdAt",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id GROUP BY t.id ORDER BY t.created_at DESC`);
+    const result = await pool.query(`SELECT t.id,t.name,t.tournament_date AS "tournamentDate",t.registration_deadline AS "registrationDeadline",t.description,t.max_teams AS "maxTeams",t.group_count AS "groupCount",t.best_third_count AS "bestThirdCount",t.competition_type AS "competitionType",t.season_format AS "seasonFormat",t.status,t.created_at AS "createdAt",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id GROUP BY t.id ORDER BY t.created_at DESC`);
     const tournaments = []; for (const t of result.rows) tournaments.push(await getTournamentDetails(t, true));
     res.set('Cache-Control','no-store'); res.json({ tournaments });
   } catch (error) { dbError(res,error,'Impossible de charger les tournois administrateur.'); }
 });
 app.post('/api/admin/tournaments', adminAuth, async (req, res) => {
   const name=String(req.body?.name||'').trim(), description=String(req.body?.description||'').trim().slice(0,500), maxTeams=Number(req.body?.maxTeams), groupCount=Number(req.body?.groupCount), bestThirdCount=Number(req.body?.bestThirdCount||0), tournamentDate=req.body?.tournamentDate?String(req.body.tournamentDate):null, registrationDeadline=req.body?.registrationDeadline?String(req.body.registrationDeadline):null;
+  const competitionType = req.body?.competitionType === 'league' ? 'league' : 'cup'; const seasonFormat = req.body?.seasonFormat === 'double' ? 'double' : 'single';
   const deadlineValid = !registrationDeadline || (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(registrationDeadline) && !Number.isNaN(new Date(`${registrationDeadline}:00+01:00`).getTime()));
-  if (name.length<2 || name.length>100 || !Number.isInteger(maxTeams) || maxTeams<8 || maxTeams>48 || !Number.isInteger(groupCount) || groupCount<2 || groupCount>24 || groupCount*4>maxTeams || groupCount*5<maxTeams || !Number.isInteger(bestThirdCount) || !(bestThirdCount===0 || (bestThirdCount>=2 && bestThirdCount<=8)) || (tournamentDate&&!/^\d{4}-\d{2}-\d{2}$/.test(tournamentDate)) || !deadlineValid) return res.status(400).json({error:'Configuration invalide : chaque groupe doit accueillir de 4 à 5 équipes. Le nombre maximal doit être compris entre 4 et 5 équipes par groupe.'});
-  try { const id=`tour-${Date.now()}-${Math.random().toString(36).slice(2,6)}`; const deadlineIso=registrationDeadline?new Date(`${registrationDeadline}:00+01:00`):null; const r=await pool.query(`INSERT INTO tournaments(id,name,tournament_date,registration_deadline,description,max_teams,group_count,best_third_count,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'open') RETURNING id,name,tournament_date AS "tournamentDate",registration_deadline AS "registrationDeadline",description,max_teams AS "maxTeams",group_count AS "groupCount",best_third_count AS "bestThirdCount",status,created_at AS "createdAt"`,[id,name,tournamentDate,deadlineIso,description,maxTeams,groupCount,bestThirdCount]); res.status(201).json({tournament:{...r.rows[0],registeredTeams:0}}); }
+  if (name.length<2 || name.length>100 || !Number.isInteger(maxTeams) || (competitionType==='league' ? (maxTeams<5||maxTeams>20) : (maxTeams<8||maxTeams>48)) || !Number.isInteger(groupCount) || (competitionType==='league' ? groupCount!==1 : (groupCount<2||groupCount>24||groupCount*4>maxTeams||groupCount*5<maxTeams)) || !Number.isInteger(bestThirdCount) || !(bestThirdCount===0 || (bestThirdCount>=2 && bestThirdCount<=8)) || (tournamentDate&&!/^\d{4}-\d{2}-\d{2}$/.test(tournamentDate)) || !deadlineValid) return res.status(400).json({error: competitionType==='league' ? 'Un championnat doit contenir de 5 à 20 équipes.' : 'Configuration invalide : chaque groupe doit accueillir de 4 à 5 équipes.'});
+  try { const id=`tour-${Date.now()}-${Math.random().toString(36).slice(2,6)}`; const deadlineIso=registrationDeadline?new Date(`${registrationDeadline}:00+01:00`):null; const r=await pool.query(`INSERT INTO tournaments(id,name,tournament_date,registration_deadline,description,max_teams,group_count,best_third_count,competition_type,season_format,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open') RETURNING id,name,tournament_date AS "tournamentDate",registration_deadline AS "registrationDeadline",description,max_teams AS "maxTeams",group_count AS "groupCount",best_third_count AS "bestThirdCount",competition_type AS "competitionType",season_format AS "seasonFormat",status,created_at AS "createdAt"`,[id,name,tournamentDate,deadlineIso,description,maxTeams,groupCount,bestThirdCount,competitionType,seasonFormat]); res.status(201).json({tournament:{...r.rows[0],registeredTeams:0}}); }
   catch(error) { dbError(res,error,'Impossible de créer le tournoi.'); }
 });
 app.patch('/api/admin/tournaments/:id/status', adminAuth, async (req,res) => { const status=String(req.body?.status||''); if(!['open','closed'].includes(status)) return res.status(400).json({error:'Statut invalide.'}); try { if(status==='open'){await closeExpiredTournamentRegistrations();const current=await pool.query(`SELECT t.registration_deadline AS "registrationDeadline",t.tournament_date AS "tournamentDate",t.max_teams AS "maxTeams",COUNT(tt.id)::int AS "registeredTeams" FROM tournaments t LEFT JOIN tournament_teams tt ON tt.tournament_id=t.id WHERE t.id=$1 GROUP BY t.id`,[String(req.params.id)]);if(!current.rowCount)return res.status(404).json({error:'Tournoi introuvable.'});const x=current.rows[0];if(x.registrationDeadline&&new Date(x.registrationDeadline).getTime()<=Date.now())return res.status(409).json({error:'La date limite est passée : ce tournoi ne peut plus être rouvert.'});if(!x.registrationDeadline&&x.tournamentDate&&String(x.tournamentDate).slice(0,10)<=getStadiumDateTime().date)return res.status(409).json({error:'Le jour du tournoi est arrivé : les inscriptions ne peuvent plus être rouvertes.'});if(Number(x.registeredTeams)>=Number(x.maxTeams))return res.status(409).json({error:'Le quota maximal est atteint : les inscriptions ne peuvent plus être rouvertes.'});const scheduled=await pool.query('SELECT 1 FROM tournament_matches WHERE tournament_id=$1 LIMIT 1',[String(req.params.id)]);if(scheduled.rowCount)return res.status(409).json({error:'Les inscriptions ne peuvent pas être rouvertes après le tirage. Réinitialise le calendrier avant d’ajouter une équipe.'});} const r=await pool.query('UPDATE tournaments SET status=$2 WHERE id=$1 RETURNING id,status',[String(req.params.id),status]); if(!r.rowCount)return res.status(404).json({error:'Tournoi introuvable.'}); res.json({ok:true,tournament:r.rows[0]}); } catch(error) { dbError(res,error,'Impossible de modifier le tournoi.'); } });
@@ -1131,10 +1158,27 @@ app.post('/api/admin/tournaments/:id/generate-schedule', adminAuth, async (req,r
   const client=await pool.connect();
   try {
     await client.query('BEGIN');
-    const tr=await client.query('SELECT id,name,group_count AS "groupCount",tournament_date AS "tournamentDate" FROM tournaments WHERE id=$1 FOR UPDATE',[tournamentId]);
+    const tr=await client.query('SELECT id,name,group_count AS "groupCount",tournament_date AS "tournamentDate",competition_type AS "competitionType",season_format AS "seasonFormat",max_teams AS "maxTeams" FROM tournaments WHERE id=$1 FOR UPDATE',[tournamentId]);
     if(!tr.rowCount){await client.query('ROLLBACK');return res.status(404).json({error:'Tournoi introuvable.'});}
     const teams=(await client.query(`SELECT id,team_name AS "teamName",group_name AS "groupName",created_at AS "createdAt" FROM tournament_teams WHERE tournament_id=$1 ORDER BY created_at,id`,[tournamentId])).rows;
     const groupCount=Number(tr.rows[0].groupCount);
+    if (tr.rows[0].competitionType === 'league') {
+      if (teams.length < 5 || teams.length > 20) { await client.query('ROLLBACK'); return res.status(400).json({error:`Un championnat nécessite entre 5 et 20 équipes inscrites. Actuellement : ${teams.length}.`}); }
+      const old=await client.query(`SELECT status FROM tournament_matches WHERE tournament_id=$1`,[tournamentId]);
+      if(old.rows.some(m=>m.status==='finished')){await client.query('ROLLBACK');return res.status(409).json({error:'Des résultats existent déjà. Le calendrier ne peut pas être remplacé.'});}
+      await client.query(`DELETE FROM tournament_matches WHERE tournament_id=$1`,[tournamentId]);
+      const firstLeg=makeRoundRobin(teams); const rounds=tr.rows[0].seasonFormat==='double' ? [...firstLeg,...firstLeg.map(r=>r.map(([h,a])=>[a,h]))] : firstLeg;
+      const baseDate=startDate || (tr.rows[0].tournamentDate?String(tr.rows[0].tournamentDate).slice(0,10):new Date().toISOString().slice(0,10));
+      const [startHour,startMinute]=startTime.split(':').map(Number); let sequence=0,created=0;
+      for(let round=0;round<rounds.length;round++) for(const [home,away] of rounds[round]) {
+        const dayOffset=Math.floor(sequence/matchesPerDay),slot=sequence%matchesPerDay,totalMinutes=startHour*60+startMinute+slot*90;
+        const date=addDays(baseDate,dayOffset),time=`${String(Math.floor(totalMinutes/60)%24).padStart(2,'0')}:${String(totalMinutes%60).padStart(2,'0')}`;
+        const id=`league-${Date.now()}-${sequence}-${Math.random().toString(36).slice(2,5)}`;
+        await client.query(`INSERT INTO tournament_matches(id,tournament_id,group_name,home_team_id,away_team_id,match_date,match_time,status,phase,round_name,round_number,match_number) VALUES($1,$2,'Championnat',$3,$4,$5,$6,'scheduled','league',$7,$8,$9)`,[id,tournamentId,home.id,away.id,date,time,`Journée ${round+1}`,round+1,sequence+1]); sequence++;created++;
+      }
+      await client.query(`UPDATE tournaments SET status='closed' WHERE id=$1`,[tournamentId]); await client.query('COMMIT');
+      return res.set('Cache-Control','no-store').json({ok:true,createdMatches:created,message:`Calendrier du championnat généré : ${created} matchs (${tr.rows[0].seasonFormat==='double'?'aller-retour':'demi-saison'}).`});
+    }
     if(teams.length<groupCount*4 || teams.length>groupCount*5){await client.query('ROLLBACK');return res.status(400).json({error:`Pour ${groupCount} groupes, il faut entre ${groupCount*4} et ${groupCount*5} équipes inscrites (4 à 5 par groupe). Actuellement : ${teams.length}.`});}
     const old=await client.query(`SELECT status FROM tournament_matches WHERE tournament_id=$1`,[tournamentId]);
     if(old.rows.some(m=>m.status==='finished')){await client.query('ROLLBACK');return res.status(409).json({error:'Des résultats existent déjà. Le calendrier ne peut pas être remplacé sans supprimer ces résultats.'});}
@@ -1189,7 +1233,9 @@ async function saveMatchResult(req,res,manual=false) {
       const goals = Number(raw?.goals);
       if (!name) continue;
       if (!Number.isInteger(goals) || goals < 1 || goals > 99) throw new Error('Chaque buteur doit avoir un nom et un nombre de buts entier entre 1 et 99.');
-      out.push({name, goals, side});
+      const assists = Number(raw?.assists || 0);
+      if (!Number.isInteger(assists) || assists < 0 || assists > 99) throw new Error('Le nombre de passes décisives doit être un entier entre 0 et 99.');
+      out.push({name, goals, assists, side});
     }
     return out;
   };

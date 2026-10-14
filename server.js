@@ -1230,11 +1230,12 @@ async function saveMatchResult(req,res,manual=false) {
     const out = [];
     for (const raw of input.slice(0, 100)) {
       const name = String(raw?.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
-      const goals = Number(raw?.goals);
+      const goals = Number(raw?.goals ?? 0);
       if (!name) continue;
-      if (!Number.isInteger(goals) || goals < 1 || goals > 99) throw new Error('Chaque buteur doit avoir un nom et un nombre de buts entier entre 1 et 99.');
       const assists = Number(raw?.assists || 0);
+      if (!Number.isInteger(goals) || goals < 0 || goals > 99) throw new Error('Le nombre de buts doit être un entier entre 0 et 99.');
       if (!Number.isInteger(assists) || assists < 0 || assists > 99) throw new Error('Le nombre de passes décisives doit être un entier entre 0 et 99.');
+      if (goals === 0 && assists === 0) continue;
       out.push({name, goals, assists, side});
     }
     return out;
@@ -1245,6 +1246,9 @@ async function saveMatchResult(req,res,manual=false) {
   const homeScorerGoals = scorers.filter(x=>x.side==='home').reduce((sum,x)=>sum+x.goals,0);
   const awayScorerGoals = scorers.filter(x=>x.side==='away').reduce((sum,x)=>sum+x.goals,0);
   if (homeScorerGoals > n.homeGoals || awayScorerGoals > n.awayGoals) return res.status(400).json({error:'Le total des buts attribués aux buteurs ne peut pas dépasser le score de leur équipe.'});
+  const homeAssistTotal = scorers.filter(x=>x.side==='home').reduce((sum,x)=>sum+x.assists,0);
+  const awayAssistTotal = scorers.filter(x=>x.side==='away').reduce((sum,x)=>sum+x.assists,0);
+  if (homeAssistTotal > n.homeGoals || awayAssistTotal > n.awayGoals) return res.status(400).json({error:'Le total des passes décisives ne peut pas dépasser le nombre de buts de l’équipe. Les buts sans passe décisive restent autorisés.'});
   const homeTeamId=String(body.homeTeamId||''),awayTeamId=String(body.awayTeamId||'');
   const date=body.matchDate?String(body.matchDate):null,time=body.matchTime?String(body.matchTime):null;
   if(manual && (!homeTeamId||!awayTeamId||homeTeamId===awayTeamId))return res.status(400).json({error:'Sélectionne deux équipes différentes.'});
